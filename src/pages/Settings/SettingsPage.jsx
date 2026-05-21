@@ -165,8 +165,11 @@ export default function SettingsPage() {
         const headerRowIdx = raw.findIndex(r => r[0] === 'No' && r[1] === 'Instansi')
         const dataRows = raw.slice(headerRowIdx + 1).filter(r => r[0] !== '' && r[9] !== '')
 
-        let success = 0, failed = 0
+        let success = 0, failed = 0, skipped = 0
         const errors = []
+
+        // Ambil data transaksi yang sudah ada untuk mengecek duplikasi
+        const existingTx = await transaksiService.getAll({ limit: 100000 })
 
         for (const row of dataRows) {
           const [, namaInstansi, tanggal, tanggalH, bulanH, tahunH, kode, bukti, jenis, uraian, sumberDana, nominal] = row
@@ -182,33 +185,51 @@ export default function SettingsPage() {
           }
 
           const jenisBersih = jenis?.toString().toLowerCase().includes('masuk') ? 'pemasukan' : 'pengeluaran'
+          const uraianBersih = uraian?.toString() || '-'
+          const tanggalBersih = tanggal?.toString() || null
+          const nominalBersih = Number(nominal) || 0
 
           const payload = {
             instansi_id:      instansi.id,
-            tanggal:          tanggal?.toString() || null,
+            tanggal:          tanggalBersih,
             tanggal_hijriyah: tanggalH?.toString() || null,
             bulan_hijriyah:   bulanH?.toString() || null,
             tahun_hijriyah:   tahunH?.toString() || null,
             kode_transaksi:   kode?.toString() || null,
             nomor_bukti:      bukti?.toString() || null,
             jenis:            jenisBersih,
-            uraian:           uraian?.toString() || '-',
+            uraian:           uraianBersih,
             sumber_dana:      sumberDana?.toString() || null,
-            nominal:          Number(nominal) || 0,
+            nominal:          nominalBersih,
+          }
+
+          // Cek duplikasi
+          const isDuplicate = existingTx.some(t => 
+            t.instansi_id === payload.instansi_id &&
+            t.uraian === payload.uraian &&
+            t.nominal === payload.nominal &&
+            t.jenis === payload.jenis &&
+            t.tanggal === payload.tanggal
+          )
+
+          if (isDuplicate) {
+            skipped++
+            errors.push(`"${payload.uraian}": sudah ada, dilewati.`)
+            continue
           }
 
           try {
             const { error } = await supabase.from('transaksi').insert(payload)
-            if (error) { failed++; errors.push(`"${uraian}": ${error.message}`) }
+            if (error) { failed++; errors.push(`"${uraianBersih}": ${error.message}`) }
             else success++
           } catch {
             failed++
-            errors.push(`"${uraian}": Error tidak terduga.`)
+            errors.push(`"${uraianBersih}": Error tidak terduga.`)
           }
         }
 
-        setImportResult({ success, failed, errors: errors.slice(0, 10) })
-        if (success > 0) showToast(`Import selesai: ${success} berhasil, ${failed} gagal.`)
+        setImportResult({ success, failed, skipped, errors: errors.slice(0, 10) })
+        if (success > 0 || skipped > 0) showToast(`Import selesai: ${success} berhasil, ${skipped} dilewati, ${failed} gagal.`)
         else showToast('Import gagal. Periksa daftar error.', 'error')
       } catch (err) {
         showToast('Terjadi kesalahan saat memproses import.', 'error')

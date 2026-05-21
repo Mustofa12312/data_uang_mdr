@@ -60,13 +60,14 @@ export default function LaporanPage() {
   const handlePrint = usePrint(printRef, `Laporan_${jenis}_${tahun}`)
 
   useEffect(() => {
-    if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
+    instansiService.getAll().then(setInstansiList).catch(console.error)
+    if (!isSuperAdmin) setSelectedInstansi(instansiId || '')
 
     pengaturanService.getSettings().then(s => {
       setSettings(s)
       if (s?.tahun_aktif) setTahun(s.tahun_aktif)
     }).catch(console.error)
-  }, [isSuperAdmin])
+  }, [isSuperAdmin, instansiId])
 
   useEffect(() => {
     jenis === 'rekap' ? loadRekap() : loadTransaksi()
@@ -149,9 +150,7 @@ export default function LaporanPage() {
   }
 
   function handleExportPDF() {
-    const instansiNama = isSuperAdmin
-      ? (instansiList.find(i => i.id === selectedInstansi)?.nama_instansi || 'Semua Instansi')
-      : ''
+    const instansiNama = instansiList.find(i => i.id === selectedInstansi)?.nama_instansi || (isSuperAdmin ? 'Semua Instansi' : '')
     if (jenis === 'rekap') {
       exportLaporanPDF({
         bulanSummary: rekapData.map(r => ({ label: r.nama_instansi, pem: r.pem, pen: r.pen, saldo: r.saldo, count: r.count })),
@@ -359,7 +358,7 @@ export default function LaporanPage() {
                 <h3 className="font-bold text-slate-800 font-display">{jenisLabel}</h3>
                 <p className="text-xs text-slate-500">
                   {getPeriodeLabel()} · Tahun {tahun}H
-                  {isSuperAdmin && selectedInstansi && ` · ${instansiList.find(i=>i.id===selectedInstansi)?.nama_instansi}`}
+                  {selectedInstansi && ` · ${instansiList.find(i=>i.id===selectedInstansi)?.nama_instansi || ''}`}
                 </p>
               </div>
               <span className={`badge text-xs ${jenis==='harian'?'badge-blue':jenis==='bulanan'?'badge-green':jenis==='tahunan'?'badge-amber':'badge-slate'}`}>

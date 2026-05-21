@@ -3,14 +3,15 @@
 // CRUD Transaksi dengan tabel kolom BKU sesuai format Excel asli
 // ============================================================
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, FunnelIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckCircleIcon, ShieldExclamationIcon, XCircleIcon } from '@heroicons/react/24/outline'
 import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
 import { formatRupiah } from '../../utils/formatRupiah'
-import { BULAN_HIJRIYAH, getBulanLabel } from '../../utils/hijriyah'
+import { BULAN_HIJRIYAH, getBulanLabel, BULAN_HIJRIYAH_LABEL } from '../../utils/hijriyah'
 import { transaksiService, instansiService, pengaturanService } from '../../services/supabase.service'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
+import * as XLSX from 'xlsx'
 
 const EMPTY_FORM = {
   tanggal: '',
@@ -27,7 +28,7 @@ const EMPTY_FORM = {
 }
 
 export default function TransaksiPage() {
-  const { isSuperAdmin, isViewer, instansiId, user } = useAuth()
+  const { isSuperAdmin, isViewer, instansiId, user, profile } = useAuth()
   const [rows, setRows] = useState([])
   const [instansiList, setInstansiList] = useState([])
   const [loading, setLoading] = useState(true)
@@ -41,13 +42,275 @@ export default function TransaksiPage() {
   const [filterTahun, setFilterTahun] = useState('1446')
   const [filterInstansi, setFilterInstansi] = useState(instansiId || '')
 
+  // Backup & Import states
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const [previewRows, setPreviewRows] = useState([])
+  const [showPreview, setShowPreview] = useState(false)
+  const [toast, setToast] = useState(null)
+  const fileInputRef = useRef()
+
+  function showToast(msg, type = 'success') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  function formatDate(val) {
+    if (!val) return null
+    if (val instanceof Date) {
+      return val.toISOString().split('T')[0]
+    }
+    const str = val.toString().trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str
+    }
+    const parts = str.split(/[-/]/)
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`
+      } else if (parts[2].length === 4) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+      }
+    }
+    return str
+  }
+
+  function parseBulanHijriyah(val) {
+    if (!val) return 'SYAWAL'
+    const v = val.toString().toUpperCase().trim()
+    
+    if (BULAN_HIJRIYAH.includes(v)) return v
+
+    const cleanVal = val.toString().toLowerCase().replace(/['`\s-]/g, '').trim()
+    for (const [key, label] of Object.entries(BULAN_HIJRIYAH_LABEL)) {
+      const cleanLabel = label.toLowerCase().replace(/['`\s-]/g, '')
+      const cleanKey = key.toLowerCase().replace(/['`\s-]/g, '')
+      if (cleanVal === cleanLabel || cleanVal === cleanKey) {
+        return key
+      }
+    }
+
+    return v
+  }
+
+  const EXPECTED_HEADERS = [
+    'No', 'Instansi', 'Tanggal (M)', 'Tanggal (H)', 'Bulan (H)', 'Tahun (H)', 
+    'Kode', 'Bukti', 'Jenis', 'Uraian', 'Sumber Dana', 'Nominal (Rp)', 'Dibuat Pada'
+  ]
+
+  async function handleExport() {
+    if (rows.length === 0) {
+      showToast('Tidak ada data transaksi untuk diekspor.', 'error')
+      return
+    }
+    setExporting(true)
+    try {
+      const wsData = [
+        ['BACKUP DATA TRANSAKSI SIKAP'],
+        ['Tanggal Ekspor', ':', new Date().toLocaleString()],
+        [],
+        EXPECTED_HEADERS
+      ]
+      
+      rows.forEach((t, i) => {
+        wsData.push([
+          i + 1,
+          t.instansi?.nama_instansi || '-',
+          t.tanggal || '',
+          t.tanggal_hijriyah || '',
+          getBulanLabel(t.bulan_hijriyah) || t.bulan_hijriyah || '',
+          t.tahun_hijriyah || '',
+          t.kode_transaksi || '',
+          t.nomor_bukti || '',
+          t.jenis?.toUpperCase() || '',
+          t.uraian || '',
+          t.sumber_dana || '',
+          t.nominal || 0,
+          new Date(t.created_at).toLocaleString()
+        ])
+      })
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Transaksi')
+      
+      const fileName = isSuperAdmin 
+        ? `Backup_Transaksi_SIKAP_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `Backup_Transaksi_${profile?.instansi?.nama_instansi || 'Unit'}_SIKAP_${new Date().toISOString().split('T')[0]}.xlsx`
+
+      XLSX.writeFile(wb, fileName)
+      showToast(`Berhasil mengekspor ${rows.length} transaksi!`)
+    } catch (e) {
+      showToast('Gagal mengekspor data.', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportResult(null)
+    setShowPreview(false)
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+        const headerRowIdx = raw.findIndex(r => r[0] === 'No' && r[1] === 'Instansi')
+        if (headerRowIdx === -1) {
+          showToast('Format file tidak valid. Gunakan file hasil Export Transaksi.', 'error')
+          fileInputRef.current.value = ''
+          return
+        }
+
+        const dataRows = raw.slice(headerRowIdx + 1).filter(r => r[0] !== '' && r[9] !== '')
+        if (dataRows.length === 0) {
+          showToast('Tidak ada data transaksi yang ditemukan dalam file.', 'error')
+          return
+        }
+
+        setPreviewRows(dataRows.slice(0, 5))
+        setShowPreview(true)
+      } catch (err) {
+        showToast('Gagal membaca file. Pastikan file tidak rusak.', 'error')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  async function handleImport() {
+    const file = fileInputRef.current?.files?.[0]
+    if (!file) return
+
+    const confirmMsg = isSuperAdmin
+      ? 'PERHATIAN!\n\nData transaksi dari file backup akan DITAMBAHKAN ke database.\nLanjutkan import?'
+      : `PERHATIAN!\n\nData transaksi dari file backup akan DITAMBAHKAN ke database instansi "${profile?.instansi?.nama_instansi || ''}".\nLanjutkan import?`
+
+    if (!window.confirm(confirmMsg)) return
+
+    setImporting(true)
+    setImportResult(null)
+    setShowPreview(false)
+
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+        const headerRowIdx = raw.findIndex(r => r[0] === 'No' && r[1] === 'Instansi')
+        const dataRows = raw.slice(headerRowIdx + 1).filter(r => r[0] !== '' && r[9] !== '')
+
+        let success = 0, failed = 0, skipped = 0
+        const errors = []
+
+        // Ambil data transaksi yang sudah ada untuk mengecek duplikasi
+        const existingTx = await transaksiService.getAll({ limit: 100000 })
+
+        for (const row of dataRows) {
+          const [, namaInstansi, tanggal, tanggalH, bulanH, tahunH, kode, bukti, jenis, uraian, sumberDana, nominal] = row
+
+          const instansi = instansiList.find(i =>
+            i.nama_instansi?.toLowerCase().trim() === namaInstansi?.toString().toLowerCase().trim()
+          )
+
+          const uraianBersih = uraian?.toString() || '-'
+
+          if (!instansi) {
+            failed++
+            errors.push(`"${uraianBersih}": Instansi "${namaInstansi}" tidak ditemukan atau Anda tidak memiliki akses.`)
+            continue
+          }
+
+          if (!isSuperAdmin && instansi.id !== instansiId) {
+            failed++
+            errors.push(`"${uraianBersih}": Anda tidak memiliki hak untuk mengimpor transaksi ke instansi "${namaInstansi}".`)
+            continue
+          }
+
+          const jenisBersih = jenis?.toString().toLowerCase().includes('keluar') || jenis?.toString().toLowerCase().includes('pengeluaran')
+            ? 'pengeluaran'
+            : 'pemasukan'
+
+          const dbBulanHijriyah = parseBulanHijriyah(bulanH)
+          
+          const tanggalBersih = tanggal ? formatDate(tanggal) : null
+          const nominalBersih = Number(nominal) || 0
+
+          const payload = {
+            instansi_id:      instansi.id,
+            tanggal:          tanggalBersih,
+            tanggal_hijriyah: tanggalH?.toString() || null,
+            bulan_hijriyah:   dbBulanHijriyah,
+            tahun_hijriyah:   tahunH?.toString() || null,
+            kode_transaksi:   kode?.toString() || null,
+            nomor_bukti:      bukti?.toString() || null,
+            jenis:            jenisBersih,
+            uraian:           uraianBersih,
+            sumber_dana:      sumberDana?.toString() || null,
+            nominal:          nominalBersih,
+            created_by:       user?.id
+          }
+
+          // Cek duplikasi
+          const isDuplicate = existingTx.some(t => 
+            t.instansi_id === payload.instansi_id &&
+            t.uraian === payload.uraian &&
+            t.nominal === payload.nominal &&
+            t.jenis === payload.jenis &&
+            t.tanggal === payload.tanggal
+          )
+
+          if (isDuplicate) {
+            skipped++
+            errors.push(`"${payload.uraian}": sudah ada, dilewati.`)
+            continue
+          }
+
+          try {
+            const { error } = await supabase.from('transaksi').insert(payload)
+            if (error) {
+              failed++
+              errors.push(`"${uraianBersih}": ${error.message}`)
+            } else {
+              success++
+            }
+          } catch {
+            failed++
+            errors.push(`"${uraianBersih}": Error tidak terduga.`)
+          }
+        }
+
+        setImportResult({ success, failed, skipped, errors: errors.slice(0, 10) })
+        if (success > 0 || skipped > 0) {
+          showToast(`Import selesai: ${success} berhasil, ${skipped} dilewati, ${failed} gagal.`)
+          load()
+        } else {
+          showToast('Import gagal. Periksa daftar error.', 'error')
+        }
+      } catch (err) {
+        showToast('Terjadi kesalahan saat memproses import.', 'error')
+      } finally {
+        setImporting(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
   useEffect(() => {
-    if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
+    instansiService.getAll().then(setInstansiList).catch(console.error)
     
     pengaturanService.getSettings().then(s => {
       if (s?.tahun_aktif) setFilterTahun(s.tahun_aktif)
     }).catch(console.error)
-  }, [isSuperAdmin])
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -141,6 +404,17 @@ export default function TransaksiPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-in
+          ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toast.type === 'error' ? '✗ ' : '✓ '}{toast.msg}
+        </div>
+      )}
+
+      {/* Hidden input file */}
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
+
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex gap-2 flex-1">
@@ -175,6 +449,28 @@ export default function TransaksiPage() {
               {instansiList.map(i => <option key={i.id} value={i.id}>{i.nama_instansi}</option>)}
             </select>
           )}
+          {/* Export Button */}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition disabled:opacity-60"
+            title="Ekspor transaksi saat ini ke Excel"
+          >
+            <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+            Export
+          </button>
+          {/* Import Button */}
+          {!isViewer && (
+            <button
+              onClick={() => { setImportResult(null); setShowPreview(false); fileInputRef.current?.click() }}
+              disabled={importing}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition disabled:opacity-60"
+              title="Impor transaksi dari Excel"
+            >
+              <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+              {importing ? 'Mengimpor...' : 'Import'}
+            </button>
+          )}
           {!isViewer && (
             <button id="btn-tambah-transaksi" className="btn-primary" onClick={openAdd}>
               <PlusIcon className="w-4 h-4" /> Tambah
@@ -196,6 +492,80 @@ export default function TransaksiPage() {
           </div>
         ))}
       </div>
+
+      {/* Preview before Import */}
+      {showPreview && previewRows.length > 0 && (
+        <div className="card border-blue-200 bg-blue-50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-blue-200 flex items-center justify-between">
+            <p className="text-sm font-semibold text-blue-800 flex items-center gap-2">
+              <ArrowUpTrayIcon className="w-4 h-4" />
+              Preview {previewRows.length} baris pertama transaksi dari file
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="tbl bg-white">
+              <thead>
+                <tr>
+                  <th>Instansi</th>
+                  <th>Uraian</th>
+                  <th>Jenis</th>
+                  <th className="text-right">Nominal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((r, i) => (
+                  <tr key={i}>
+                    <td>{r[1]}</td>
+                    <td className="font-medium">{r[9]}</td>
+                    <td>
+                      <span className={r[8]?.toString().toLowerCase().includes('keluar') || r[8]?.toString().toLowerCase().includes('pengeluaran') ? 'badge-red' : 'badge-green'}>
+                        {r[8]}
+                      </span>
+                    </td>
+                    <td className="text-right font-mono">{formatRupiah(Number(r[11]))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-3 border-t border-blue-200 flex gap-2">
+            <button onClick={handleImport} disabled={importing}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+              <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+              {importing ? 'Mengimpor...' : 'Mulai Import'}
+            </button>
+            <button onClick={() => { setShowPreview(false); setPreviewRows([]); fileInputRef.current.value = '' }}
+              className="px-4 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition hover:bg-slate-50">
+              Batal
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hasil Import */}
+      {importResult && (
+        <div className={`card p-4 border ${importResult.failed === 0 ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+          <div className="flex items-center gap-2 mb-2">
+            {importResult.failed === 0
+              ? <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
+              : <ShieldExclamationIcon className="w-4 h-4 text-amber-600" />
+            }
+            <p className="text-sm font-semibold text-slate-700">
+              ✓ {importResult.success} transaksi berhasil diimpor
+              {importResult.failed > 0 && <span className="text-red-600"> &nbsp;· {importResult.failed} gagal</span>}
+            </p>
+          </div>
+          {importResult.errors.length > 0 && (
+            <div className="space-y-1 mt-1">
+              {importResult.errors.map((e, i) => (
+                <p key={i} className="text-[11px] text-slate-600 flex items-start gap-1">
+                  <XCircleIcon className="w-3 h-3 flex-shrink-0 mt-0.5 text-red-500" />{e}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       <div className="card overflow-hidden">

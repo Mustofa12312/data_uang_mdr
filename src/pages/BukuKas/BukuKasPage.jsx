@@ -165,8 +165,8 @@ export default function BukuKasPage() {
   )
 
   useEffect(() => {
-    if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
-    else setSelectedInstansi(instansiId || '')
+    instansiService.getAll().then(setInstansiList).catch(console.error)
+    if (!isSuperAdmin) setSelectedInstansi(instansiId || '')
 
     pengaturanService.getSettings().then(s => {
       setSettings(s)
