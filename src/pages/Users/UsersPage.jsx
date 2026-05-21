@@ -8,6 +8,7 @@ import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
 import { profileService, instansiService } from '../../services/supabase.service'
 import { supabase } from '../../lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
 const EMPTY = { nama: '', email: '', password: '', role: 'admin_instansi', instansi_id: '', akses_menu: ['/dashboard', '/transaksi', '/buku-kas', '/laporan'] }
 const ROLES = [
@@ -87,15 +88,23 @@ export default function UsersPage() {
         })
         showToast('Data pengguna berhasil diperbarui')
       } else {
-        // Create: perlu Supabase Admin API atau sign up flow
-        // Karena anon key tidak punya createUser, kita gunakan signUp lalu update profile
-        const { data, error } = await supabase.auth.signUp({
+        // Buat client sementara agar signUp tidak menimpa/logout sesi Super Admin yang sedang aktif
+        const tempClient = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY,
+          { auth: { persistSession: false, autoRefreshToken: false } }
+        )
+
+        const { data, error } = await tempClient.auth.signUp({
           email: form.email,
           password: form.password,
           options: { data: { nama: form.nama } },
         })
         if (error) throw error
-        // Insert profile
+        
+        if (!data.user) throw new Error('Pembuatan user gagal, email mungkin sudah terdaftar')
+
+        // Insert profile menggunakan klien utama (yang masih login sebagai Super Admin)
         await supabase.from('profiles').upsert({
           id: data.user.id,
           nama: form.nama,
@@ -104,7 +113,7 @@ export default function UsersPage() {
           instansi_id: form.instansi_id || null,
           akses_menu: form.akses_menu,
         })
-        showToast('Pengguna baru berhasil ditambahkan. Cek email untuk konfirmasi.')
+        showToast('Pengguna baru berhasil ditambahkan.')
       }
       setModalOpen(false)
       load()
