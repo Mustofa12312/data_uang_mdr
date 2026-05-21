@@ -156,6 +156,8 @@ export default function BukuKasPage() {
   const [loading, setLoading]         = useState(false)
   const printRef = useRef()
 
+  const instansiObj = instansiList.find(i => i.id === selectedInstansi) || null
+
   // react-to-print v3
   const handlePrint = usePrint(
     printRef,
@@ -186,8 +188,6 @@ export default function BukuKasPage() {
   }
 
   useEffect(() => { loadBKU() }, [selectedBulan, selectedInstansi, tahun, instansiId, isSuperAdmin])
-
-  const instansiObj = instansiList.find(i => i.id === selectedInstansi) || null
 
   function handleExportPDF() {
     exportBKUPDF({ transaksi, instansi: instansiObj, bulan: selectedBulan, tahun })
