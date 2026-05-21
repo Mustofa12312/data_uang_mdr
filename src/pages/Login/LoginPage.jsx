@@ -69,8 +69,9 @@ export default function LoginPage() {
               </div>
             ))}
           </div>
-          <p className="text-emerald-300 text-xs mt-6 text-center">
-            Dibuat oleh Cakrawala Digital. <br />Hubungi : 0813 5908 8246
+          <p className="text-emerald-300 text-sm mt-8 text-center leading-relaxed">
+            Dibuat oleh Cakrawala Digital. <br />
+            Hubungi : <span className="font-bold text-white">0813 5908 8246</span>
           </p>
         </div>
       </div>
