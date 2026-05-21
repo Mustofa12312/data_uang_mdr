@@ -1,61 +1,66 @@
-import { useState, useEffect } from 'react'
-import { Cog6ToothIcon, ArrowDownTrayIcon, DocumentCheckIcon } from '@heroicons/react/24/outline'
-import { pengaturanService, transaksiService } from '../../services/supabase.service'
+import { useState, useEffect, useRef } from 'react'
+import { Cog6ToothIcon, ArrowDownTrayIcon, DocumentCheckIcon, ArrowUpTrayIcon, ShieldExclamationIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline'
+import { pengaturanService, transaksiService, instansiService } from '../../services/supabase.service'
+import { supabase } from '../../lib/supabase'
 import * as XLSX from 'xlsx'
 import { formatRupiah } from '../../utils/formatRupiah'
 import { getBulanLabel } from '../../utils/hijriyah'
 
+const EXPECTED_HEADERS = ['No', 'Instansi', 'Tanggal (M)', 'Tanggal (H)', 'Bulan (H)', 'Tahun (H)', 'Kode', 'Bukti', 'Jenis', 'Uraian', 'Sumber Dana', 'Nominal (Rp)', 'Dibuat Pada']
+
 export default function SettingsPage() {
   const [form, setForm] = useState({
-    nama_yayasan: '',
-    alamat_yayasan: '',
-    ketua_yayasan: '',
-    bendahara_pusat: '',
-    tahun_aktif: ''
+    nama_yayasan: '', alamat_yayasan: '', ketua_yayasan: '', bendahara_pusat: '', tahun_aktif: ''
   })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [toast, setToast] = useState(null)
+  const [loading, setLoading]           = useState(true)
+  const [saving, setSaving]             = useState(false)
+  const [exporting, setExporting]       = useState(false)
+  const [importing, setImporting]       = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const [previewRows, setPreviewRows]   = useState([])
+  const [showPreview, setShowPreview]   = useState(false)
+  const [toast, setToast]               = useState(null)
+  const [instansiList, setInstansiList] = useState([])
+  const fileInputRef = useRef()
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 4000)
   }
 
   async function loadSettings() {
     setLoading(true)
     try {
-      const data = await pengaturanService.getSettings()
+      const [data, instansi] = await Promise.all([
+        pengaturanService.getSettings(),
+        instansiService.getAll(),
+      ])
+      setInstansiList(instansi)
       if (data && data.id) {
         setForm({
-          nama_yayasan: data.nama_yayasan || '',
-          alamat_yayasan: data.alamat_yayasan || '',
-          ketua_yayasan: data.ketua_yayasan || '',
-          bendahara_pusat: data.bendahara_pusat || '',
-          tahun_aktif: data.tahun_aktif || ''
+          nama_yayasan:    data.nama_yayasan   || '',
+          alamat_yayasan:  data.alamat_yayasan || '',
+          ketua_yayasan:   data.ketua_yayasan  || '',
+          bendahara_pusat: data.bendahara_pusat|| '',
+          tahun_aktif:     data.tahun_aktif    || ''
         })
       }
     } catch (e) {
-      console.error(e)
-      showToast('Gagal memuat pengaturan. Pastikan Anda sudah menjalankan SQL tabel pengaturan.', 'error')
+      showToast('Gagal memuat pengaturan.', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
+  useEffect(() => { loadSettings() }, [])
 
   async function handleSave(e) {
     e.preventDefault()
     setSaving(true)
     try {
       await pengaturanService.updateSettings(form)
-      showToast('Pengaturan berhasil disimpan! Tampilan cetak laporan akan menggunakan data baru ini.')
+      showToast('Pengaturan berhasil disimpan!')
     } catch (e) {
-      console.error(e)
       showToast('Gagal menyimpan pengaturan.', 'error')
     } finally {
       setSaving(false)
@@ -65,22 +70,15 @@ export default function SettingsPage() {
   async function handleBackup() {
     setExporting(true)
     try {
-      // Ambil seluruh data transaksi tanpa batasan instansi/bulan (limit besar)
       const data = await transaksiService.getAll({ limit: 100000 })
-      
-      if (data.length === 0) {
-        showToast('Tidak ada transaksi untuk di-backup.', 'error')
-        return
-      }
+      if (data.length === 0) { showToast('Tidak ada transaksi untuk di-backup.', 'error'); return }
 
-      // Format data untuk Excel
       const wsData = [
         ['BACKUP MASTER DATA TRANSAKSI SIKAP'],
         ['Tanggal Backup', ':', new Date().toLocaleString()],
         [],
-        ['No', 'Instansi', 'Tanggal (M)', 'Tanggal (H)', 'Bulan (H)', 'Tahun (H)', 'Kode', 'Bukti', 'Jenis', 'Uraian', 'Sumber Dana', 'Nominal (Rp)', 'Dibuat Pada']
+        EXPECTED_HEADERS
       ]
-
       data.forEach((t, i) => {
         wsData.push([
           i + 1,
@@ -101,23 +99,128 @@ export default function SettingsPage() {
 
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "Master Data")
-      
-      const fileName = `Backup_Master_SIKAP_${new Date().toISOString().split('T')[0]}.xlsx`
-      XLSX.writeFile(wb, fileName)
-      
+      XLSX.utils.book_append_sheet(wb, ws, 'Master Data')
+      XLSX.writeFile(wb, `Backup_Master_SIKAP_${new Date().toISOString().split('T')[0]}.xlsx`)
       showToast(`Berhasil mengekspor ${data.length} transaksi!`)
     } catch (e) {
-      console.error(e)
       showToast('Gagal melakukan backup data.', 'error')
     } finally {
       setExporting(false)
     }
   }
 
-  if (loading) {
-    return <div className="py-20 text-center text-slate-400">Memuat pengaturan...</div>
+  // Baca file dan tampilkan preview
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportResult(null)
+    setShowPreview(false)
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+        const headerRowIdx = raw.findIndex(r => r[0] === 'No' && r[1] === 'Instansi')
+        if (headerRowIdx === -1) {
+          showToast('Format file tidak valid. Gunakan file dari Backup SIKAP.', 'error')
+          fileInputRef.current.value = ''
+          return
+        }
+
+        const dataRows = raw.slice(headerRowIdx + 1).filter(r => r[0] !== '' && r[9] !== '')
+        if (dataRows.length === 0) {
+          showToast('Tidak ada data yang ditemukan dalam file.', 'error')
+          return
+        }
+
+        setPreviewRows(dataRows.slice(0, 5))
+        setShowPreview(true)
+      } catch (err) {
+        showToast('Gagal membaca file. Pastikan file tidak rusak.', 'error')
+      }
+    }
+    reader.readAsArrayBuffer(file)
   }
+
+  async function handleImport() {
+    const file = fileInputRef.current?.files?.[0]
+    if (!file) return
+
+    if (!window.confirm('PERHATIAN!\n\nData dari file backup akan DITAMBAHKAN ke database.\nData lama TIDAK dihapus.\n\nLanjutkan import?')) return
+
+    setImporting(true)
+    setImportResult(null)
+    setShowPreview(false)
+
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+        const headerRowIdx = raw.findIndex(r => r[0] === 'No' && r[1] === 'Instansi')
+        const dataRows = raw.slice(headerRowIdx + 1).filter(r => r[0] !== '' && r[9] !== '')
+
+        let success = 0, failed = 0
+        const errors = []
+
+        for (const row of dataRows) {
+          const [, namaInstansi, tanggal, tanggalH, bulanH, tahunH, kode, bukti, jenis, uraian, sumberDana, nominal] = row
+
+          const instansi = instansiList.find(i =>
+            i.nama_instansi?.toLowerCase().trim() === namaInstansi?.toString().toLowerCase().trim()
+          )
+
+          if (!instansi) {
+            failed++
+            errors.push(`"${uraian}": Instansi "${namaInstansi}" tidak ditemukan di sistem.`)
+            continue
+          }
+
+          const jenisBersih = jenis?.toString().toLowerCase().includes('masuk') ? 'pemasukan' : 'pengeluaran'
+
+          const payload = {
+            instansi_id:      instansi.id,
+            tanggal:          tanggal?.toString() || null,
+            tanggal_hijriyah: tanggalH?.toString() || null,
+            bulan_hijriyah:   bulanH?.toString() || null,
+            tahun_hijriyah:   tahunH?.toString() || null,
+            kode_transaksi:   kode?.toString() || null,
+            nomor_bukti:      bukti?.toString() || null,
+            jenis:            jenisBersih,
+            uraian:           uraian?.toString() || '-',
+            sumber_dana:      sumberDana?.toString() || null,
+            nominal:          Number(nominal) || 0,
+          }
+
+          try {
+            const { error } = await supabase.from('transaksi').insert(payload)
+            if (error) { failed++; errors.push(`"${uraian}": ${error.message}`) }
+            else success++
+          } catch {
+            failed++
+            errors.push(`"${uraian}": Error tidak terduga.`)
+          }
+        }
+
+        setImportResult({ success, failed, errors: errors.slice(0, 10) })
+        if (success > 0) showToast(`Import selesai: ${success} berhasil, ${failed} gagal.`)
+        else showToast('Import gagal. Periksa daftar error.', 'error')
+      } catch (err) {
+        showToast('Terjadi kesalahan saat memproses import.', 'error')
+      } finally {
+        setImporting(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  if (loading) return <div className="py-20 text-center text-slate-400">Memuat pengaturan...</div>
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -133,18 +236,17 @@ export default function SettingsPage() {
           <Cog6ToothIcon className="w-6 h-6 text-emerald-600" />
           Pengaturan Sistem
         </h2>
-        <p className="text-sm text-slate-500 mt-1">Kelola identitas yayasan, tanda tangan laporan, dan backup data master.</p>
+        <p className="text-sm text-slate-500 mt-1">Kelola identitas yayasan, tanda tangan laporan, dan backup/import data master.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Kolom Kiri: Form Pengaturan */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Kiri: Form */}
+        <div className="lg:col-span-2">
           <form onSubmit={handleSave} className="card p-6 space-y-5">
             <h3 className="font-semibold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
               <DocumentCheckIcon className="w-5 h-5 text-emerald-500" />
               Identitas & Kop Laporan
             </h3>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className="label">Nama Induk Yayasan</label>
@@ -152,20 +254,17 @@ export default function SettingsPage() {
                   value={form.nama_yayasan} onChange={e => setForm({ ...form, nama_yayasan: e.target.value })} />
                 <p className="text-[10px] text-slate-400 mt-1">Akan muncul di baris paling atas kop surat BKU.</p>
               </div>
-
               <div className="md:col-span-2">
                 <label className="label">Alamat Lengkap (Kop Surat)</label>
                 <input required className="input" placeholder="Contoh: Blu'uran, Karang Penang, Sampang"
                   value={form.alamat_yayasan} onChange={e => setForm({ ...form, alamat_yayasan: e.target.value })} />
               </div>
-
               <div>
                 <label className="label">Nama Ketua Yayasan</label>
                 <input required className="input" placeholder="Nama Ketua"
                   value={form.ketua_yayasan} onChange={e => setForm({ ...form, ketua_yayasan: e.target.value })} />
                 <p className="text-[10px] text-slate-400 mt-1">Penandatangan kiri pada cetak BKU.</p>
               </div>
-
               <div>
                 <label className="label">Nama Bendahara Pusat</label>
                 <input required className="input" placeholder="Nama Bendahara"
@@ -181,7 +280,6 @@ export default function SettingsPage() {
                 value={form.tahun_aktif} onChange={e => setForm({ ...form, tahun_aktif: e.target.value })} />
               <p className="text-[10px] text-slate-400 mt-1">Tahun ini akan otomatis terpilih di menu Laporan & BKU.</p>
             </div>
-
             <div className="pt-4 flex justify-end">
               <button type="submit" className="btn-primary" disabled={saving}>
                 {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
@@ -190,25 +288,117 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* Kolom Kanan: Backup Data */}
-        <div className="space-y-6">
+        {/* Kanan: Backup & Import */}
+        <div className="space-y-4">
+          {/* Backup */}
           <div className="card p-6 border-amber-200 bg-amber-50">
             <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4 border border-amber-200">
               <ArrowDownTrayIcon className="w-6 h-6 text-amber-600" />
             </div>
             <h3 className="font-bold text-amber-900 mb-2">Backup Master Data</h3>
-            <p className="text-xs text-amber-700 leading-relaxed mb-6">
-              Fitur ini akan mengekspor <strong>seluruh data transaksi dari semua instansi dan bulan</strong> ke dalam satu file Excel (.xlsx). 
-              Sangat disarankan untuk melakukan backup setiap akhir bulan sebagai arsip darurat pimpinan.
+            <p className="text-xs text-amber-700 leading-relaxed mb-4">
+              Ekspor <strong>seluruh data transaksi dari semua instansi</strong> ke satu file Excel. Disarankan setiap akhir bulan sebagai arsip darurat.
             </p>
-            <button 
-              onClick={handleBackup} 
-              disabled={exporting}
-              className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm shadow-amber-200 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleBackup} disabled={exporting}
+              className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-amber-200 disabled:opacity-70">
               <ArrowDownTrayIcon className="w-4 h-4" />
-              {exporting ? 'Memproses Data...' : 'Download Master Excel'}
+              {exporting ? 'Memproses...' : 'Download Master Excel'}
             </button>
+          </div>
+
+          {/* Import */}
+          <div className="card p-6 border-blue-200 bg-blue-50">
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 border border-blue-200">
+              <ArrowUpTrayIcon className="w-6 h-6 text-blue-600" />
+            </div>
+            <h3 className="font-bold text-blue-900 mb-1">Import dari Backup</h3>
+            <p className="text-xs text-blue-700 leading-relaxed mb-4">
+              Pulihkan data dari file backup Excel. Data lama <strong>tidak dihapus</strong> — data dari file akan <strong>ditambahkan</strong> ke database.
+            </p>
+
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
+
+            <button
+              onClick={() => { setImportResult(null); setShowPreview(false); fileInputRef.current?.click() }}
+              disabled={importing}
+              className="w-full py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-blue-200 disabled:opacity-70"
+            >
+              <ArrowUpTrayIcon className="w-4 h-4" />
+              {importing ? 'Sedang Mengimpor...' : 'Pilih File Backup (.xlsx)'}
+            </button>
+
+            {/* Preview */}
+            {showPreview && previewRows.length > 0 && (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-white overflow-hidden">
+                <div className="px-3 py-2 bg-blue-100">
+                  <p className="text-xs font-semibold text-blue-800">Preview {previewRows.length} baris pertama</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px]">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-2 py-1 text-left text-slate-500">Instansi</th>
+                        <th className="px-2 py-1 text-left text-slate-500">Uraian</th>
+                        <th className="px-2 py-1 text-slate-500">Jenis</th>
+                        <th className="px-2 py-1 text-right text-slate-500">Nominal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {previewRows.map((r, i) => (
+                        <tr key={i}>
+                          <td className="px-2 py-1 text-slate-600 truncate max-w-[80px]">{r[1]}</td>
+                          <td className="px-2 py-1 text-slate-700 font-medium truncate max-w-[100px]">{r[9]}</td>
+                          <td className={`px-2 py-1 text-center font-semibold ${r[8]?.toString().toLowerCase().includes('masuk') ? 'text-emerald-600' : 'text-red-500'}`}>{r[8]}</td>
+                          <td className="px-2 py-1 text-right text-slate-700">{formatRupiah(Number(r[11]))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-3 py-2 border-t border-blue-100 flex gap-2">
+                  <button onClick={handleImport} disabled={importing}
+                    className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold transition flex items-center justify-center gap-1">
+                    <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+                    {importing ? 'Mengimpor...' : 'Mulai Import'}
+                  </button>
+                  <button onClick={() => { setShowPreview(false); setPreviewRows([]); fileInputRef.current.value = '' }}
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-md text-xs font-semibold transition">
+                    Batal
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Hasil Import */}
+            {importResult && (
+              <div className="mt-3 rounded-lg border overflow-hidden">
+                <div className={`px-3 py-2 flex items-center gap-2 ${importResult.failed === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  {importResult.failed === 0
+                    ? <CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    : <ShieldExclamationIcon className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  }
+                  <p className="text-xs font-semibold text-slate-700">
+                    ✓ {importResult.success} berhasil
+                    {importResult.failed > 0 && <span className="text-red-600"> &nbsp;✗ {importResult.failed} gagal</span>}
+                  </p>
+                </div>
+                {importResult.errors.length > 0 && (
+                  <div className="px-3 py-2 bg-white space-y-1 max-h-32 overflow-y-auto">
+                    {importResult.errors.map((err, i) => (
+                      <p key={i} className="text-[10px] text-red-600 flex items-start gap-1">
+                        <XCircleIcon className="w-3 h-3 flex-shrink-0 mt-0.5" />{err}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-3 p-2 rounded-lg bg-blue-100/70 border border-blue-200">
+              <p className="text-[10px] text-blue-700 leading-relaxed">
+                💡 <strong>Catatan:</strong> Gunakan hanya file dari menu Backup SIKAP. Nama instansi di file harus sama persis dengan yang ada di sistem.
+              </p>
+            </div>
           </div>
         </div>
       </div>
