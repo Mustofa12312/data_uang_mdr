@@ -1,8 +1,9 @@
 // ============================================================
 // src/components/layout/Navbar.jsx
 // ============================================================
-import { Bars3Icon, BellIcon } from '@heroicons/react/24/outline'
+import { Bars3Icon } from '@heroicons/react/24/outline'
 import { useAuth } from '../../context/AuthContext'
+import NotificationPanel from '../ui/NotificationPanel'
 
 export default function Navbar({ onMenuClick, title }) {
   const { profile } = useAuth()
@@ -21,9 +22,7 @@ export default function Navbar({ onMenuClick, title }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition relative">
-          <BellIcon className="w-5 h-5" />
-        </button>
+        <NotificationPanel />
         <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold">
           {profile?.nama?.[0]?.toUpperCase() || 'U'}
         </div>
@@ -31,3 +30,4 @@ export default function Navbar({ onMenuClick, title }) {
     </header>
   )
 }
+

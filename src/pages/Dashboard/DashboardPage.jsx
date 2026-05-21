@@ -7,28 +7,29 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   ScaleIcon,
-  BuildingOffice2Icon,
+  ClockIcon,
 } from '@heroicons/react/24/outline'
 import {
-  LineChart, Line, BarChart, Bar,
+  AreaChart, Area,
+  BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import StatCard from '../../components/ui/StatCard'
-import { formatRupiah, formatNumber } from '../../utils/formatRupiah'
-import { BULAN_HIJRIYAH, BULAN_HIJRIYAH_LABEL, getBulanLabel } from '../../utils/hijriyah'
-import { transaksiService, instansiService } from '../../services/supabase.service'
+import { formatRupiah } from '../../utils/formatRupiah'
+import { BULAN_HIJRIYAH, getBulanLabel } from '../../utils/hijriyah'
+import { transaksiService, instansiService, pengaturanService } from '../../services/supabase.service'
 import { useAuth } from '../../context/AuthContext'
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3 text-xs">
-      <p className="font-semibold text-slate-700 mb-2">{label}</p>
+    <div className="bg-white border border-slate-200 rounded-xl shadow-xl p-3 text-xs">
+      <p className="font-semibold text-slate-700 mb-2 border-b border-slate-100 pb-1">{label}</p>
       {payload.map(p => (
         <div key={p.dataKey} className="flex items-center gap-2 mb-1">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-          <span className="text-slate-600">{p.name}:</span>
-          <span className="font-semibold">{formatRupiah(p.value)}</span>
+          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+          <span className="text-slate-500">{p.name}:</span>
+          <span className="font-bold text-slate-800">{formatRupiah(p.value)}</span>
         </div>
       ))}
     </div>
@@ -37,44 +38,44 @@ function CustomTooltip({ active, payload, label }) {
 
 export default function DashboardPage() {
   const { isSuperAdmin, instansiId } = useAuth()
-  const [transaksi, setTransaksi] = useState([])
-  const [instansiList, setInstansiList] = useState([])
+  const [transaksi, setTransaksi]         = useState([])
+  const [instansiList, setInstansiList]   = useState([])
   const [selectedInstansi, setSelectedInstansi] = useState(instansiId || '')
-  const [loading, setLoading] = useState(true)
+  const [tahun, setTahun]                 = useState('1446')
+  const [loading, setLoading]             = useState(true)
+  const [chartType, setChartType]         = useState('area')
 
   useEffect(() => {
-    if (isSuperAdmin) {
-      instansiService.getAll().then(setInstansiList).catch(console.error)
-    }
+    if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
+    pengaturanService.getSettings().then(s => {
+      if (s?.tahun_aktif) setTahun(s.tahun_aktif)
+    }).catch(console.error)
   }, [isSuperAdmin])
 
   useEffect(() => {
     setLoading(true)
     const id = isSuperAdmin ? (selectedInstansi || null) : instansiId
-    transaksiService.getAll({ instansiId: id })
+    transaksiService.getAll({ instansiId: id, tahunHijriyah: tahun || null })
       .then(setTransaksi)
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [selectedInstansi, instansiId, isSuperAdmin])
+  }, [selectedInstansi, instansiId, isSuperAdmin, tahun])
 
-  // Summary stats
   const stats = useMemo(() => {
     const pem = transaksi.filter(t => t.jenis === 'pemasukan').reduce((s, t) => s + (t.nominal || 0), 0)
     const pen = transaksi.filter(t => t.jenis === 'pengeluaran').reduce((s, t) => s + (t.nominal || 0), 0)
     return { pemasukan: pem, pengeluaran: pen, saldo: pem - pen }
   }, [transaksi])
 
-  // Chart data per bulan Hijriyah
   const chartData = useMemo(() => {
     return BULAN_HIJRIYAH.map(bulan => {
       const data = transaksi.filter(t => t.bulan_hijriyah === bulan)
       const pem = data.filter(t => t.jenis === 'pemasukan').reduce((s, t) => s + (t.nominal || 0), 0)
       const pen = data.filter(t => t.jenis === 'pengeluaran').reduce((s, t) => s + (t.nominal || 0), 0)
-      return { name: getBulanLabel(bulan).substring(0, 8), pem, pen, count: data.length }
+      return { name: getBulanLabel(bulan).substring(0, 8), pem, pen, saldo: pem - pen, count: data.length }
     }).filter(d => d.pem > 0 || d.pen > 0)
   }, [transaksi])
 
-  // Recent transactions
   const recent = useMemo(() =>
     [...transaksi].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8),
     [transaksi]
@@ -86,20 +87,29 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-800 font-display">Ringkasan Keuangan</h2>
-          <p className="text-sm text-slate-500">Data seluruh transaksi tercatat</p>
+          <p className="text-sm text-slate-500">Tahun Hijriyah {tahun}H · {transaksi.length} transaksi</p>
         </div>
-        {isSuperAdmin && (
-          <select
-            className="input w-full sm:w-48"
-            value={selectedInstansi}
-            onChange={e => setSelectedInstansi(e.target.value)}
-          >
-            <option value="">Semua Instansi</option>
-            {instansiList.map(i => (
-              <option key={i.id} value={i.id}>{i.nama_instansi}</option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="text"
+            className="input w-24 text-center"
+            value={tahun}
+            onChange={e => setTahun(e.target.value)}
+            placeholder="1446"
+          />
+          {isSuperAdmin && (
+            <select
+              className="input w-48"
+              value={selectedInstansi}
+              onChange={e => setSelectedInstansi(e.target.value)}
+            >
+              <option value="">Semua Instansi</option>
+              {instansiList.map(i => (
+                <option key={i.id} value={i.id}>{i.nama_instansi}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -141,24 +151,74 @@ export default function DashboardPage() {
       {/* Chart */}
       {!loading && chartData.length > 0 && (
         <div className="card p-5">
-          <h3 className="font-semibold text-slate-700 font-display mb-4">Grafik Per Bulan Hijriyah</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={chartData} barGap={4} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }}
-                tickFormatter={v => v >= 1e6 ? `${(v/1e6).toFixed(0)}jt` : v >= 1e3 ? `${(v/1e3).toFixed(0)}rb` : v} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="pem" name="Pemasukan" fill="#10b981" radius={[4,4,0,0]} />
-              <Bar dataKey="pen" name="Pengeluaran" fill="#f87171" radius={[4,4,0,0]} />
-            </BarChart>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="font-semibold text-slate-800 font-display">Grafik Per Bulan Hijriyah</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Tren penerimaan dan pengeluaran tahun {tahun}H</p>
+            </div>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-medium">
+              <button
+                onClick={() => setChartType('area')}
+                className={`px-3 py-1.5 rounded-md transition ${chartType === 'area' ? 'bg-white shadow text-emerald-700' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Area
+              </button>
+              <button
+                onClick={() => setChartType('bar')}
+                className={`px-3 py-1.5 rounded-md transition ${chartType === 'bar' ? 'bg-white shadow text-emerald-700' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Batang
+              </button>
+            </div>
+          </div>
+
+          <ResponsiveContainer width="100%" height={260}>
+            {chartType === 'area' ? (
+              <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradPem" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.02}/>
+                  </linearGradient>
+                  <linearGradient id="gradPen" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f87171" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#f87171" stopOpacity={0.02}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                  tickFormatter={v => v >= 1e6 ? `${(v/1e6).toFixed(0)}jt` : v >= 1e3 ? `${(v/1e3).toFixed(0)}rb` : v} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: '12px' }} />
+                <Area type="monotone" dataKey="pem" name="Pemasukan" stroke="#10b981" strokeWidth={2.5} fill="url(#gradPem)" dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
+                <Area type="monotone" dataKey="pen" name="Pengeluaran" stroke="#f87171" strokeWidth={2.5} fill="url(#gradPen)" dot={{ r: 4, fill: '#f87171' }} activeDot={{ r: 6 }} />
+              </AreaChart>
+            ) : (
+              <BarChart data={chartData} barGap={4} barCategoryGap="30%" margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                  tickFormatter={v => v >= 1e6 ? `${(v/1e6).toFixed(0)}jt` : v >= 1e3 ? `${(v/1e3).toFixed(0)}rb` : v} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: '12px' }} />
+                <Bar dataKey="pem" name="Pemasukan" fill="#10b981" radius={[5,5,0,0]} />
+                <Bar dataKey="pen" name="Pengeluaran" fill="#f87171" radius={[5,5,0,0]} />
+              </BarChart>
+            )}
           </ResponsiveContainer>
         </div>
       )}
 
+      {!loading && chartData.length === 0 && (
+        <div className="card p-8 text-center text-slate-400">
+          <BanknotesIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">Belum ada data transaksi untuk tahun {tahun}H</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Bulan summary table */}
+        {/* Rekap per bulan */}
         <div className="card">
           <div className="px-5 py-4 border-b border-slate-100">
             <h3 className="font-semibold text-slate-700 font-display">Rekap Per Bulan</h3>
@@ -196,9 +256,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent transactions */}
+        {/* Transaksi Terbaru */}
         <div className="card">
-          <div className="px-5 py-4 border-b border-slate-100">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <ClockIcon className="w-4 h-4 text-slate-400" />
             <h3 className="font-semibold text-slate-700 font-display">Transaksi Terbaru</h3>
           </div>
           <div className="divide-y divide-slate-100">
