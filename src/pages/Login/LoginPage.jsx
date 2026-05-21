@@ -40,8 +40,8 @@ export default function LoginPage() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-              <ShieldCheckIcon className="w-7 h-7 text-white" />
+            <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+              <ShieldCheckIcon className="w-10 h-10 text-white" />
             </div>
             <div>
               <p className="text-white font-bold text-xl font-display">SIKAP</p>
@@ -69,9 +69,9 @@ export default function LoginPage() {
               </div>
             ))}
           </div>
-          <p className="text-emerald-300 text-sm mt-8 text-center leading-relaxed">
+          <p className="text-emerald-200 text-base mt-12 text-center leading-relaxed">
             Dibuat oleh Cakrawala Digital. <br />
-            Hubungi : <span className="font-bold text-white">0813 5908 8246</span>
+            Hubungi : <span className="font-bold text-white text-lg">0813 5908 8246</span>
           </p>
         </div>
       </div>
