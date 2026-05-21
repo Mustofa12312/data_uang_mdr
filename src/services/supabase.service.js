@@ -38,7 +38,7 @@ export const instansiService = {
 
 // ---- TRANSAKSI ----
 export const transaksiService = {
-  async getAll({ instansiId, bulanHijriyah, tahunHijriyah, search, tglMulai, tglAkhir, limit = 1000 }) {
+  async getAll({ instansiId, bulanHijriyah, tahunHijriyah, search, tglMulai, tglAkhir, limit = 100000 }) {
     let q = supabase
       .from('transaksi')
       .select('*, instansi:instansi_id(nama_instansi, kode_instansi)')

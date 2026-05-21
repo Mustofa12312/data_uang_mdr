@@ -38,7 +38,7 @@ export default function TransaksiPage() {
   const [editRow, setEditRow] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [search, setSearch] = useState('')
-  const [filterBulan, setFilterBulan] = useState('')
+  const [filterBulan, setFilterBulan] = useState(BULAN_HIJRIYAH[0])
   const [filterTahun, setFilterTahun] = useState('1446')
   const [filterInstansi, setFilterInstansi] = useState(instansiId || '')
 
