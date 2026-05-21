@@ -70,7 +70,7 @@ export default function LoginPage() {
             ))}
           </div>
           <p className="text-emerald-300 text-xs mt-6 text-center">
-            © {new Date().getFullYear()} Pondok Pesantren Darur Rohman
+            Dibuat oleh Cakrawala Digital. <br />Hubungi : 0813 5908 8246
           </p>
         </div>
       </div>
