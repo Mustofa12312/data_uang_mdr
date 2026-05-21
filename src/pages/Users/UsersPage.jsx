@@ -3,7 +3,7 @@
 // Super admin only — dengan fitur Reset Password
 // ============================================================
 import { useState, useEffect } from 'react'
-import { PlusIcon, PencilIcon, KeyIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, KeyIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
 import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
 import { profileService, instansiService } from '../../services/supabase.service'
@@ -35,6 +35,7 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('')
   const [saving, setSaving]           = useState(false)
   const [resetting, setResetting]     = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [toast, setToast]             = useState(null)
 
   function showToast(msg, type = 'success') {
@@ -57,7 +58,7 @@ export default function UsersPage() {
 
   useEffect(() => { load() }, [])
 
-  function openAdd() { setForm(EMPTY); setEditItem(null); setModalOpen(true) }
+  function openAdd() { setForm(EMPTY); setEditItem(null); setShowPassword(false); setModalOpen(true) }
   function openEdit(item) {
     setForm({ 
       nama: item.nama, 
@@ -262,8 +263,14 @@ export default function UsersPage() {
               </div>
               <div>
                 <label className="label">Password Awal *</label>
-                <input type="password" className="input" placeholder="Minimal 6 karakter"
-                  value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                <div className="relative">
+                  <input type={showPassword ? 'text' : 'password'} className="input pr-10" placeholder="Minimal 6 karakter"
+                    value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none">
+                    {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                  </button>
+                </div>
                 <p className="text-xs text-slate-400 mt-1">User akan menerima email konfirmasi dari Supabase</p>
               </div>
             </>
