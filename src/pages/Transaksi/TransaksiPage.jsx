@@ -3,9 +3,11 @@
 // CRUD Transaksi dengan tabel kolom BKU sesuai format Excel asli
 // ============================================================
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, FunnelIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckCircleIcon, ShieldExclamationIcon, XCircleIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, FunnelIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckCircleIcon, ShieldExclamationIcon, XCircleIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
+import KuitansiLayout from '../../components/pdf/KuitansiLayout'
+import { usePrint } from '../../hooks/usePrint'
 import { formatRupiah } from '../../utils/formatRupiah'
 import { BULAN_HIJRIYAH, getBulanLabel, BULAN_HIJRIYAH_LABEL } from '../../utils/hijriyah'
 import { transaksiService, instansiService, pengaturanService } from '../../services/supabase.service'
@@ -49,6 +51,14 @@ export default function TransaksiPage() {
   const [previewRows, setPreviewRows] = useState([])
   const [showPreview, setShowPreview] = useState(false)
   const [toast, setToast] = useState(null)
+  
+  // Print Kuitansi
+  const [printTarget, setPrintTarget] = useState(null)
+  const [settings, setSettings] = useState(null)
+  const [showKuitansiModal, setShowKuitansiModal] = useState(false)
+  const kuitansiRef = useRef()
+  const handlePrint = usePrint(kuitansiRef, `Kuitansi_${printTarget?.nomor_bukti || 'Transaksi'}`)
+
   const fileInputRef = useRef()
 
   function showToast(msg, type = 'success') {
@@ -308,6 +318,7 @@ export default function TransaksiPage() {
     instansiService.getAll().then(setInstansiList).catch(console.error)
     
     pengaturanService.getSettings().then(s => {
+      setSettings(s)
       if (s?.tahun_aktif) setFilterTahun(s.tahun_aktif)
     }).catch(console.error)
   }, [])
@@ -621,6 +632,13 @@ export default function TransaksiPage() {
                       <td>
                         <div className="flex gap-1">
                           <button
+                            onClick={() => { setPrintTarget(row); setShowKuitansiModal(true) }}
+                            className="p-1.5 rounded hover:bg-slate-100 text-slate-500 transition"
+                            title="Cetak Kuitansi"
+                          >
+                            <PrinterIcon className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => openEdit(row)}
                             className="p-1.5 rounded hover:bg-blue-50 text-blue-500 transition"
                             title="Edit"
@@ -736,20 +754,28 @@ export default function TransaksiPage() {
         </div>
       </Modal>
 
-      {/* Delete confirm */}
-      <Modal
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title="Hapus Transaksi"
-        size="sm"
-        footer={
-          <>
-            <button className="btn-secondary" onClick={() => setDeleteId(null)}>Batal</button>
-            <button className="btn-danger" onClick={handleDelete}>Ya, Hapus</button>
-          </>
-        }
-      >
-        <p className="text-slate-600 text-sm">Apakah Anda yakin ingin menghapus transaksi ini? Tindakan ini tidak dapat dibatalkan.</p>
+      {/* Modal Hapus */}
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Hapus Transaksi">
+        <p className="text-slate-600 mb-6">Anda yakin ingin menghapus transaksi ini? Data yang dihapus tidak dapat dikembalikan.</p>
+        <div className="flex justify-end gap-3">
+          <button className="btn-secondary" onClick={() => setDeleteId(null)}>Batal</button>
+          <button className="btn-primary bg-red-600 hover:bg-red-700" onClick={handleDelete}>Ya, Hapus</button>
+        </div>
+      </Modal>
+
+      {/* Modal Kuitansi Preview */}
+      <Modal open={showKuitansiModal} onClose={() => setShowKuitansiModal(false)} title="Preview Kuitansi" size="xl">
+        <div className="bg-slate-100 p-4 rounded-xl overflow-x-auto flex justify-center border border-slate-200">
+          <div className="bg-white shadow-sm border border-slate-300" style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+            <KuitansiLayout ref={kuitansiRef} transaksi={printTarget} settings={settings} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button className="btn-secondary" onClick={() => setShowKuitansiModal(false)}>Tutup</button>
+          <button className="btn-primary flex items-center gap-2" onClick={handlePrint}>
+            <PrinterIcon className="w-4 h-4" /> Cetak PDF / A4
+          </button>
+        </div>
       </Modal>
     </div>
   )
