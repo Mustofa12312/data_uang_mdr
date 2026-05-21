@@ -65,23 +65,32 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         {/* Profile mini */}
-        <div className="px-5 py-3 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-emerald-700">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 border border-emerald-200">
+              <span className="text-sm font-bold text-emerald-700">
                 {profile?.nama?.[0]?.toUpperCase() || 'U'}
               </span>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-700 truncate">{profile?.nama || 'User'}</p>
-              <p className="text-[10px] text-slate-400 truncate capitalize">{profile?.role?.replace('_', ' ') || '-'}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-800 truncate">{profile?.nama || 'User'}</p>
+              <p className="text-xs text-slate-500 truncate capitalize">{profile?.role?.replace('_', ' ') || '-'}</p>
             </div>
           </div>
-          {profile?.instansi && (
-            <div className="mt-2 px-2 py-1 rounded-lg bg-emerald-50 text-[10px] text-emerald-700 font-medium truncate">
-              {profile.instansi.nama_instansi}
+          
+          {profile?.instansi ? (
+            <div className="px-3 py-2 rounded-lg bg-emerald-600 shadow-sm shadow-emerald-200 text-center border border-emerald-500">
+              <p className="text-[10px] text-emerald-200 uppercase tracking-wider font-semibold mb-0.5">Mengelola Instansi</p>
+              <p className="text-sm font-bold text-white truncate">
+                {profile.instansi.nama_instansi}
+              </p>
             </div>
-          )}
+          ) : isSuperAdmin ? (
+            <div className="px-3 py-2 rounded-lg bg-blue-600 shadow-sm shadow-blue-200 text-center border border-blue-500">
+              <p className="text-[10px] text-blue-200 uppercase tracking-wider font-semibold mb-0.5">Akses Penuh</p>
+              <p className="text-sm font-bold text-white truncate">Semua Instansi</p>
+            </div>
+          ) : null}
         </div>
 
         {/* Navigation */}
