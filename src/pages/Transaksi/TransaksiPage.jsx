@@ -257,13 +257,15 @@ export default function TransaksiPage() {
                           >
                             <PencilIcon className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => setDeleteId(row.id)}
-                            className="p-1.5 rounded hover:bg-red-50 text-red-400 transition"
-                            title="Hapus"
-                          >
-                            <TrashIcon className="w-3.5 h-3.5" />
-                          </button>
+                          {isSuperAdmin && (
+                            <button
+                              onClick={() => setDeleteId(row.id)}
+                              className="p-1.5 rounded hover:bg-red-50 text-red-400 transition"
+                              title="Hapus Khusus Super Admin"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}

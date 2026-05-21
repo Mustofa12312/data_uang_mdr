@@ -3,7 +3,7 @@
 // Super admin only — dengan fitur Reset Password
 // ============================================================
 import { useState, useEffect } from 'react'
-import { PlusIcon, PencilIcon, KeyIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, KeyIcon, EyeIcon, EyeSlashIcon, NoSymbolIcon, CheckCircleIcon, TrashIcon } from '@heroicons/react/24/outline'
 import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
 import { profileService, instansiService } from '../../services/supabase.service'
@@ -11,10 +11,12 @@ import { supabase } from '../../lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 
 const EMPTY = { nama: '', email: '', password: '', role: 'admin_instansi', instansi_id: '', akses_menu: ['/dashboard', '/transaksi', '/buku-kas', '/laporan'] }
+
 const ROLES = [
   { value: 'super_admin',    label: 'Super Admin',        badge: 'badge-blue' },
   { value: 'admin_instansi', label: 'Admin Instansi',     badge: 'badge-green' },
   { value: 'viewer',         label: 'Viewer / Pimpinan',  badge: 'badge-amber' },
+  { value: 'blocked',        label: 'Akses Diblokir',     badge: 'badge-red' },
 ]
 
 const MENU_OPTIONS = [
@@ -144,6 +146,51 @@ export default function UsersPage() {
     } finally { setResetting(false) }
   }
 
+  async function handleToggleBlock(item) {
+    if (item.role === 'super_admin') {
+      showToast('Tidak dapat memblokir sesama Super Admin!', 'error')
+      return
+    }
+    const isCurrentlyBlocked = item.role === 'blocked'
+    const newRole = isCurrentlyBlocked ? 'admin_instansi' : 'blocked'
+    const confirmMsg = isCurrentlyBlocked
+      ? `Pulihkan akses untuk ${item.nama}?`
+      : `Cabut akses (Blokir) pengguna ${item.nama}? Mereka akan langsung logout dan tidak bisa masuk lagi.`
+      
+    if (!window.confirm(confirmMsg)) return
+
+    try {
+      await profileService.update(item.id, { role: newRole })
+      showToast(isCurrentlyBlocked ? `Akses ${item.nama} dipulihkan.` : `Akses ${item.nama} berhasil dicabut.`)
+      load()
+    } catch (e) {
+      showToast('Gagal mengubah status: ' + e.message, 'error')
+    }
+  }
+
+  async function handleDeleteUser(item) {
+    if (item.role === 'super_admin') {
+      showToast('Tidak dapat menghapus sesama Super Admin!', 'error')
+      return
+    }
+
+    const confirmMsg = `HAPUS PERMANEN pengguna ${item.nama}? \n\nSemua data login pengguna ini akan musnah dan tidak bisa dikembalikan. (Pastikan Anda sudah menjalankan SQL delete_user di Supabase).`
+    if (!window.confirm(confirmMsg)) return
+
+    setLoading(true)
+    try {
+      const { error } = await supabase.rpc('delete_user', { target_user_id: item.id })
+      if (error) throw error
+      
+      showToast(`Pengguna ${item.nama} berhasil dihapus permanen.`)
+      load()
+    } catch (e) {
+      console.error(e)
+      showToast('Gagal menghapus: ' + (e.message || 'Pastikan SQL delete_user sudah dijalankan di Supabase.'), 'error')
+      setLoading(false)
+    }
+  }
+
   const roleInfo = (r) => ROLES.find(x => x.value === r) || { label: r, badge: 'badge-slate' }
 
   return (
@@ -232,6 +279,24 @@ export default function UsersPage() {
                           >
                             <KeyIcon className="w-3.5 h-3.5" />
                           </button>
+                          {item.role !== 'super_admin' && (
+                            <>
+                              <button
+                                onClick={() => handleToggleBlock(item)}
+                                className={`p-1.5 rounded transition ${item.role === 'blocked' ? 'hover:bg-emerald-50 text-emerald-500' : 'hover:bg-amber-50 text-amber-500'}`}
+                                title={item.role === 'blocked' ? 'Pulihkan Akses' : 'Cabut Akses (Blokir)'}
+                              >
+                                {item.role === 'blocked' ? <CheckCircleIcon className="w-3.5 h-3.5" /> : <NoSymbolIcon className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(item)}
+                                className="p-1.5 rounded hover:bg-red-50 text-red-500 transition"
+                                title="Hapus Permanen"
+                              >
+                                <TrashIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

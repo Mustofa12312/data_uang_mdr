@@ -8,7 +8,7 @@ import { PrinterIcon, ArrowDownTrayIcon, DocumentArrowDownIcon } from '@heroicon
 import { usePrint } from '../../hooks/usePrint'
 import { formatRupiah } from '../../utils/formatRupiah'
 import { BULAN_HIJRIYAH, getBulanLabel } from '../../utils/hijriyah'
-import { transaksiService, instansiService } from '../../services/supabase.service'
+import { transaksiService, instansiService, pengaturanService } from '../../services/supabase.service'
 import { useAuth } from '../../context/AuthContext'
 import { exportLaporanPDF } from '../../utils/exportPDF'
 import * as XLSX from 'xlsx'
@@ -53,6 +53,7 @@ export default function LaporanPage() {
   const [tglMulai, setTglMulai]         = useState('')
   const [tglAkhir, setTglAkhir]         = useState('')
   const [loading, setLoading]           = useState(false)
+  const [settings, setSettings]         = useState(null)
   const printRef = useRef()
 
   // react-to-print v3
@@ -60,6 +61,11 @@ export default function LaporanPage() {
 
   useEffect(() => {
     if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
+
+    pengaturanService.getSettings().then(s => {
+      setSettings(s)
+      if (s?.tahun_aktif) setTahun(s.tahun_aktif)
+    }).catch(console.error)
   }, [isSuperAdmin])
 
   useEffect(() => {
@@ -151,10 +157,10 @@ export default function LaporanPage() {
         bulanSummary: rekapData.map(r => ({ label: r.nama_instansi, pem: r.pem, pen: r.pen, saldo: r.saldo, count: r.count })),
         summary: rekapSummary,
         instansiNama: 'Semua Instansi',
-        jenis, filterLabel: `Tahun ${tahun}H`, tahun,
+        jenis, filterLabel: `Tahun ${tahun}H`, tahun, settings
       })
     } else {
-      exportLaporanPDF({ bulanSummary: grouped, summary, instansiNama, jenis, filterLabel: getPeriodeLabel(), tahun })
+      exportLaporanPDF({ bulanSummary: grouped, summary, instansiNama, jenis, filterLabel: getPeriodeLabel(), tahun, settings })
     }
   }
 
@@ -329,11 +335,11 @@ export default function LaporanPage() {
           <div className="hidden print:flex justify-between px-6 pb-6 mt-4">
             <div className="text-center text-sm">
               <p>Mengetahui,</p><p>Ketua Yayasan</p>
-              <div className="mt-16 border-t border-black w-36 mx-auto pt-1"><p className="font-bold">K. KHOIRUS SHOLEH</p></div>
+              <div className="mt-16 border-t border-black w-36 mx-auto pt-1"><p className="font-bold">{settings?.ketua_yayasan || 'K. KHOIRUS SHOLEH'}</p></div>
             </div>
             <div className="text-center text-sm">
               <p>Sampang, ....................... {tahun}H</p><p>Bendahara</p>
-              <div className="mt-16 border-t border-black w-36 mx-auto pt-1"><p>......................................</p></div>
+              <div className="mt-16 border-t border-black w-36 mx-auto pt-1"><p className="font-bold">{settings?.bendahara_pusat || '......................................'}</p></div>
             </div>
           </div>
         </div>
@@ -346,7 +352,7 @@ export default function LaporanPage() {
           <div className="px-5 py-4 border-b border-slate-100">
             <div className="hidden print:block text-center mb-4">
               <h1 className="text-xl font-bold">LAPORAN KEUANGAN</h1>
-              <p className="text-sm text-gray-500">Pondok Pesantren Darur Rohman</p>
+              <p className="text-sm text-gray-500">{settings?.nama_yayasan || 'Pondok Pesantren Darur Rohman'}</p>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -452,11 +458,11 @@ export default function LaporanPage() {
             <div className="hidden print:flex justify-between mt-10">
               <div className="text-center text-sm">
                 <p>Mengetahui,</p><p>Ketua Yayasan</p>
-                <div className="mt-16 border-t border-black w-36 mx-auto pt-1 font-bold"><p>K. KHOIRUS SHOLEH</p></div>
+                <div className="mt-16 border-t border-black w-36 mx-auto pt-1 font-bold"><p>{settings?.ketua_yayasan || 'K. KHOIRUS SHOLEH'}</p></div>
               </div>
               <div className="text-center text-sm">
                 <p>Sampang, ....................... {tahun}H</p><p>Bendahara</p>
-                <div className="mt-16 border-t border-black w-36 mx-auto pt-1"><p>......................................</p></div>
+                <div className="mt-16 border-t border-black w-36 mx-auto pt-1 font-bold"><p>{settings?.bendahara_pusat || '......................................'}</p></div>
               </div>
             </div>
           </div>

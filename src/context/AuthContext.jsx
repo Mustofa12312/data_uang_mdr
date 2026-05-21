@@ -17,6 +17,13 @@ export function AuthProvider({ children }) {
       .select('*, instansi:instansi_id(id, nama_instansi, kode_instansi)')
       .eq('id', userId)
       .single()
+      
+    if (data?.role === 'blocked') {
+      await supabase.auth.signOut()
+      setUser(null)
+      setProfile(null)
+      return
+    }
     setProfile(data)
   }
 

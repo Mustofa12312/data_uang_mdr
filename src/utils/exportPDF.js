@@ -9,7 +9,7 @@ import { getBulanLabel } from './hijriyah'
 /**
  * Export BKU (Buku Kas Umum) ke PDF — format A4 portrait
  */
-export function exportBKUPDF({ transaksi, instansi, bulan, tahun }) {
+export function exportBKUPDF({ transaksi, instansi, bulan, tahun, settings }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
   const pageW = doc.internal.pageSize.getWidth()
@@ -25,9 +25,9 @@ export function exportBKUPDF({ transaksi, instansi, bulan, tahun }) {
 
   const infoY = 26
   // Kiri
-  doc.text(`Nama Madrasah : ${instansi?.nama_instansi || '___________'}`, margin, infoY)
-  doc.text(`Desa/Kecamatan : Blu'uran, Karang Penang`, margin, infoY + 5)
-  doc.text(`Kabupaten : Sampang`, margin, infoY + 10)
+  doc.text(`Nama Yayasan : ${settings?.nama_yayasan || 'Pondok Pesantren Darur Rohman'}`, margin, infoY)
+  doc.text(`Nama Madrasah : ${instansi?.nama_instansi || '___________'}`, margin, infoY + 5)
+  doc.text(`Alamat : ${settings?.alamat_yayasan || "Blu'uran, Karang Penang, Sampang"}`, margin, infoY + 10)
   // Kanan
   doc.text(`Bulan   : ${getBulanLabel(bulan)}`, pageW / 2 + 10, infoY)
   doc.text(`Halaman : ____`, pageW / 2 + 10, infoY + 5)
@@ -99,8 +99,9 @@ export function exportBKUPDF({ transaksi, instansi, bulan, tahun }) {
   doc.text(`Sampang, ..................................... ${tahun}H`, pageW / 2 + 5, ttdY)
   doc.text('Ketua Yayasan', margin, ttdY + 5)
   doc.text('Bendahara', pageW / 2 + 5, ttdY + 5)
-  doc.text('K. KHOIRUS SHOLEH', margin, ttdY + 22)
-  doc.text('......................................', pageW / 2 + 5, ttdY + 22)
+  doc.setFont('helvetica', 'bold')
+  doc.text(settings?.ketua_yayasan || 'K. KHOIRUS SHOLEH', margin, ttdY + 22)
+  doc.text(settings?.bendahara_pusat || '......................................', pageW / 2 + 5, ttdY + 22)
 
   doc.save(`BKU_${instansi?.kode_instansi || 'INSTANSI'}_${bulan}_${tahun}.pdf`)
 }
@@ -108,7 +109,7 @@ export function exportBKUPDF({ transaksi, instansi, bulan, tahun }) {
 /**
  * Export Laporan Rekap ke PDF
  */
-export function exportLaporanPDF({ bulanSummary, summary, instansiNama, jenis, filterLabel, tahun }) {
+export function exportLaporanPDF({ bulanSummary, summary, instansiNama, jenis, filterLabel, tahun, settings }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const margin = 15
@@ -119,7 +120,7 @@ export function exportLaporanPDF({ bulanSummary, summary, instansiNama, jenis, f
   doc.text('LAPORAN KEUANGAN', pageW / 2, 18, { align: 'center' })
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
-  doc.text('Pondok Pesantren Darur Rohman', pageW / 2, 25, { align: 'center' })
+  doc.text(settings?.nama_yayasan || 'Pondok Pesantren Darur Rohman', pageW / 2, 25, { align: 'center' })
 
   doc.setFontSize(9)
   doc.text(`Instansi : ${instansiNama || 'Semua Instansi'}`, margin, 33)
@@ -194,8 +195,9 @@ export function exportLaporanPDF({ bulanSummary, summary, instansiNama, jenis, f
   doc.text(`Sampang, ..................................... ${tahun}H`, pageW / 2 + 5, ttdY)
   doc.text('Ketua Yayasan', margin, ttdY + 5)
   doc.text('Bendahara', pageW / 2 + 5, ttdY + 5)
-  doc.text('K. KHOIRUS SHOLEH', margin, ttdY + 22)
-  doc.text('......................................', pageW / 2 + 5, ttdY + 22)
+  doc.setFont('helvetica', 'bold')
+  doc.text(settings?.ketua_yayasan || 'K. KHOIRUS SHOLEH', margin, ttdY + 22)
+  doc.text(settings?.bendahara_pusat || '......................................', pageW / 2 + 5, ttdY + 22)
 
   doc.save(`Laporan_${jenis}_${tahun}.pdf`)
 }
