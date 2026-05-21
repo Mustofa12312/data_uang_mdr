@@ -108,3 +108,22 @@ export const profileService = {
     return data
   },
 }
+
+// ---- PENGATURAN ----
+export const pengaturanService = {
+  async getSettings() {
+    const { data, error } = await supabase.from('pengaturan').select('*').eq('id', 1).single()
+    if (error && error.code !== 'PGRST116') throw error // Abaikan error jika data kosong (belum ada baris)
+    return data || {}
+  },
+  async updateSettings(payload) {
+    const { data, error } = await supabase
+      .from('pengaturan')
+      .update(payload)
+      .eq('id', 1)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  }
+}

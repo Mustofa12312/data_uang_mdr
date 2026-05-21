@@ -8,7 +8,7 @@ import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
 import { formatRupiah } from '../../utils/formatRupiah'
 import { BULAN_HIJRIYAH, getBulanLabel } from '../../utils/hijriyah'
-import { transaksiService, instansiService } from '../../services/supabase.service'
+import { transaksiService, instansiService, pengaturanService } from '../../services/supabase.service'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 
@@ -43,6 +43,10 @@ export default function TransaksiPage() {
 
   useEffect(() => {
     if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
+    
+    pengaturanService.getSettings().then(s => {
+      if (s?.tahun_aktif) setFilterTahun(s.tahun_aktif)
+    }).catch(console.error)
   }, [isSuperAdmin])
 
   async function load() {
@@ -75,7 +79,11 @@ export default function TransaksiPage() {
   }
 
   function openAdd() {
-    setForm({ ...EMPTY_FORM, instansi_id: isSuperAdmin ? (filterInstansi || '') : instansiId })
+    setForm({ 
+      ...EMPTY_FORM, 
+      instansi_id: isSuperAdmin ? (filterInstansi || '') : instansiId,
+      tahun_hijriyah: filterTahun
+    })
     setEditRow(null)
     setModalOpen(true)
   }

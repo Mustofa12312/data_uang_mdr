@@ -8,7 +8,7 @@ import { PrinterIcon, ArrowDownTrayIcon, DocumentArrowDownIcon } from '@heroicon
 import { usePrint } from '../../hooks/usePrint'
 import { formatRupiah } from '../../utils/formatRupiah'
 import { BULAN_HIJRIYAH, getBulanLabel } from '../../utils/hijriyah'
-import { transaksiService, instansiService } from '../../services/supabase.service'
+import { transaksiService, instansiService, pengaturanService } from '../../services/supabase.service'
 import { useAuth } from '../../context/AuthContext'
 import { exportBKUPDF } from '../../utils/exportPDF'
 import * as XLSX from 'xlsx'
@@ -24,7 +24,7 @@ const tdS = {
 }
 
 // ─── BKU Print Layout ───────────────────────────────────────
-function BKUPrintLayout({ transaksi, instansi, bulan, tahun }) {
+function BKUPrintLayout({ transaksi, instansi, bulan, tahun, settings }) {
   let runSaldo = 0
   const totalPem = transaksi.filter(r => r.jenis === 'pemasukan').reduce((s, r) => s + r.nominal, 0)
   const totalPen = transaksi.filter(r => r.jenis === 'pengeluaran').reduce((s, r) => s + r.nominal, 0)
@@ -41,22 +41,21 @@ function BKUPrintLayout({ transaksi, instansi, bulan, tahun }) {
       <table style={{ width: '100%', fontSize: '10.5pt', marginBottom: '8px', borderCollapse: 'collapse' }}>
         <tbody>
           <tr>
-            <td style={{ width: '26%' }}>Nama Madrasah</td>
+            <td style={{ width: '26%' }}>Nama Yayasan</td>
             <td style={{ width: '2%' }}>:</td>
-            <td style={{ width: '37%' }}><strong>{instansi?.nama_instansi || '____________________'}</strong></td>
+            <td style={{ width: '37%' }}><strong>{settings?.nama_yayasan || 'Pondok Pesantren Darur Rohman'}</strong></td>
             <td style={{ width: '14%' }}>Bulan</td>
             <td style={{ width: '2%' }}>:</td>
             <td><strong>{getBulanLabel(bulan)}</strong></td>
           </tr>
           <tr>
-            <td>Desa/Kecamatan</td><td>:</td>
-            <td>Blu&apos;uran, Karang Penang</td>
+            <td>Nama Instansi</td><td>:</td>
+            <td><strong>{instansi?.nama_instansi || '____________________'}</strong></td>
             <td>Halaman</td><td>:</td><td>____</td>
           </tr>
           <tr>
-            <td>Kabupaten</td><td>:</td>
-            <td>Sampang</td>
-            <td colSpan={3} />
+            <td>Alamat</td><td>:</td>
+            <td colSpan={4}>{settings?.alamat_yayasan || "Blu'uran, Karang Penang, Sampang"}</td>
           </tr>
         </tbody>
       </table>
@@ -136,8 +135,8 @@ function BKUPrintLayout({ transaksi, instansi, bulan, tahun }) {
           <tr><td>Ketua Yayasan</td><td style={{ textAlign: 'right' }}>Bendahara</td></tr>
           <tr style={{ height: '46px' }}><td /><td /></tr>
           <tr>
-            <td><strong>K. KHOIRUS SHOLEH</strong></td>
-            <td style={{ textAlign: 'right' }}>..............................................</td>
+            <td><strong>{settings?.ketua_yayasan || 'K. KHOIRUS SHOLEH'}</strong></td>
+            <td style={{ textAlign: 'right' }}><strong>{settings?.bendahara_pusat || '..............................................'}</strong></td>
           </tr>
         </tbody>
       </table>
@@ -154,6 +153,7 @@ export default function BukuKasPage() {
   const [selectedBulan, setSelectedBulan] = useState(BULAN_HIJRIYAH[0])
   const [tahun, setTahun]             = useState('1446')
   const [loading, setLoading]         = useState(false)
+  const [settings, setSettings]       = useState(null)
   const printRef = useRef()
 
   const instansiObj = instansiList.find(i => i.id === selectedInstansi) || null
@@ -167,6 +167,11 @@ export default function BukuKasPage() {
   useEffect(() => {
     if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
     else setSelectedInstansi(instansiId || '')
+
+    pengaturanService.getSettings().then(s => {
+      setSettings(s)
+      if (s?.tahun_aktif) setTahun(s.tahun_aktif)
+    }).catch(console.error)
   }, [isSuperAdmin, instansiId])
 
   async function loadBKU() {
@@ -190,7 +195,7 @@ export default function BukuKasPage() {
   useEffect(() => { loadBKU() }, [selectedBulan, selectedInstansi, tahun, instansiId, isSuperAdmin])
 
   function handleExportPDF() {
-    exportBKUPDF({ transaksi, instansi: instansiObj, bulan: selectedBulan, tahun })
+    exportBKUPDF({ transaksi, instansi: instansiObj, bulan: selectedBulan, tahun, settings })
   }
 
   function handleExportExcel() {
@@ -314,6 +319,7 @@ export default function BukuKasPage() {
                 instansi={instansiObj}
                 bulan={selectedBulan}
                 tahun={tahun}
+                settings={settings}
               />
             ) : (
               <div className="p-10 text-center text-slate-400">

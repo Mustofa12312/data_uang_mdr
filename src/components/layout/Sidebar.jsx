@@ -12,6 +12,7 @@ import {
   UsersIcon,
   ArrowRightOnRectangleIcon,
   ShieldCheckIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline'
 
 const navItems = [
@@ -22,8 +23,9 @@ const navItems = [
 ]
 
 const adminItems = [
-  { to: '/instansi', label: 'Instansi', icon: BuildingOffice2Icon },
-  { to: '/users',    label: 'Pengguna',  icon: UsersIcon },
+  { to: '/instansi',  label: 'Instansi',   icon: BuildingOffice2Icon },
+  { to: '/users',     label: 'Pengguna',   icon: UsersIcon },
+  { to: '/pengaturan',label: 'Pengaturan', icon: Cog6ToothIcon },
 ]
 
 export default function Sidebar({ open, onClose }) {

@@ -14,6 +14,7 @@ import BukuKasPage from './pages/BukuKas/BukuKasPage'
 import LaporanPage from './pages/Laporan/LaporanPage'
 import InstansiPage from './pages/Instansi/InstansiPage'
 import UsersPage from './pages/Users/UsersPage'
+import SettingsPage from './pages/Settings/SettingsPage'
 
 export default function App() {
   return (
@@ -47,6 +48,14 @@ export default function App() {
               element={
                 <ProtectedRoute adminOnly>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pengaturan"
+              element={
+                <ProtectedRoute adminOnly>
+                  <SettingsPage />
                 </ProtectedRoute>
               }
             />
