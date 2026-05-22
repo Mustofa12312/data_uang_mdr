@@ -124,10 +124,6 @@ export default function UsersPage() {
   }
 
   async function handleResetPassword() {
-    if (!newPassword || newPassword.length < 6) {
-      showToast('Password minimal 6 karakter', 'error')
-      return
-    }
     setResetting(true)
     try {
       // Menggunakan Supabase Admin API via edge function atau

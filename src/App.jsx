@@ -8,6 +8,7 @@ import DashboardLayout from './components/layout/DashboardLayout'
 
 // Pages
 import LoginPage from './pages/Login/LoginPage'
+import ResetPasswordPage from './pages/Login/ResetPasswordPage'
 import DashboardPage from './pages/Dashboard/DashboardPage'
 import TransaksiPage from './pages/Transaksi/TransaksiPage'
 import BukuKasPage from './pages/BukuKas/BukuKasPage'
@@ -22,6 +23,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
           <Route

@@ -381,13 +381,23 @@ export default function TransaksiPage() {
   }
 
   async function handleSave() {
-    if (!form.uraian || !form.nominal) return
+    if (!form.uraian || !form.nominal) {
+      alert('Uraian dan nominal harus diisi')
+      return
+    }
+    
+    const finalInstansiId = isSuperAdmin ? form.instansi_id : instansiId
+    if (!finalInstansiId) {
+      alert('Instansi tidak ditemukan. Silakan pilih instansi atau muat ulang halaman.')
+      return
+    }
+
     setSaving(true)
     try {
       const payload = {
         ...form,
         nominal: parseInt(form.nominal) || 0,
-        instansi_id: isSuperAdmin ? form.instansi_id : instansiId,
+        instansi_id: finalInstansiId,
         created_by: user?.id,
       }
       if (editRow) await transaksiService.update(editRow.id, payload)
