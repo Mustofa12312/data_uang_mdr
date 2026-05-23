@@ -18,7 +18,7 @@ import * as XLSX from 'xlsx'
 const EMPTY_FORM = {
   tanggal: '',
   tanggal_hijriyah: '',
-  bulan_hijriyah: 'SYAWAL',
+  bulan_hijriyah: '',
   tahun_hijriyah: '1446',
   kode_transaksi: '',
   nomor_bukti: '',
@@ -43,6 +43,8 @@ export default function TransaksiPage() {
   const [filterBulan, setFilterBulan] = useState(BULAN_HIJRIYAH[0])
   const [filterTahun, setFilterTahun] = useState('1446')
   const [filterInstansi, setFilterInstansi] = useState(instansiId || '')
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 50
 
   // Backup & Import states
   const [exporting, setExporting] = useState(false)
@@ -325,6 +327,7 @@ export default function TransaksiPage() {
 
   async function load() {
     setLoading(true)
+    setCurrentPage(1)
     const id = isSuperAdmin ? (filterInstansi || null) : instansiId
     try {
       const data = await transaksiService.getAll({
@@ -366,7 +369,7 @@ export default function TransaksiPage() {
     setForm({
       tanggal: row.tanggal || '',
       tanggal_hijriyah: row.tanggal_hijriyah || '',
-      bulan_hijriyah: row.bulan_hijriyah || 'SYAWAL',
+      bulan_hijriyah: row.bulan_hijriyah || '',
       tahun_hijriyah: row.tahun_hijriyah || '1446',
       kode_transaksi: row.kode_transaksi || '',
       nomor_bukti: row.nomor_bukti || '',
@@ -381,8 +384,8 @@ export default function TransaksiPage() {
   }
 
   async function handleSave() {
-    if (!form.uraian || !form.nominal) {
-      alert('Uraian dan nominal harus diisi')
+    if (!form.uraian || !form.nominal || !form.bulan_hijriyah) {
+      alert('Uraian, nominal, dan bulan hijriyah harus diisi')
       return
     }
     
@@ -422,6 +425,13 @@ export default function TransaksiPage() {
     const pen = rows.filter(r => r.jenis === 'pengeluaran').reduce((s, r) => s + r.nominal, 0)
     return { pem, pen, saldo: pem - pen }
   }, [rows])
+
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return rows.slice(start, start + pageSize)
+  }, [rows, currentPage])
+  
+  const totalPages = Math.ceil(rows.length / pageSize)
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -617,9 +627,9 @@ export default function TransaksiPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
+                {paginatedRows.map((row, i) => (
                   <tr key={row.id}>
-                    <td className="text-slate-400">{i + 1}</td>
+                    <td className="text-slate-400">{(currentPage - 1) * pageSize + i + 1}</td>
                     <td className="whitespace-nowrap">{row.tanggal || '-'}</td>
                     <td className="whitespace-nowrap text-slate-500">{row.tanggal_hijriyah || '-'}</td>
                     <td className="text-slate-500">{row.kode_transaksi || '-'}</td>
@@ -680,6 +690,31 @@ export default function TransaksiPage() {
               </tbody>
             </table>
           )}
+          
+          {/* Pagination */}
+          {!loading && rows.length > pageSize && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-white">
+              <p className="text-xs text-slate-500">
+                Menampilkan {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, rows.length)} dari {rows.length} transaksi
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  className="px-3 py-1.5 rounded border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Sebelumnya
+                </button>
+                <button
+                  className="px-3 py-1.5 rounded border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Selanjutnya
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -731,8 +766,9 @@ export default function TransaksiPage() {
               value={form.tanggal_hijriyah} onChange={e => setForm(f => ({...f, tanggal_hijriyah: e.target.value}))} />
           </div>
           <div>
-            <label className="label">Bulan Hijriyah</label>
-            <select className="input" value={form.bulan_hijriyah} onChange={e => setForm(f => ({...f, bulan_hijriyah: e.target.value}))}>
+            <label className="label">Bulan Hijriyah *</label>
+            <select className="input" value={form.bulan_hijriyah} onChange={e => setForm(f => ({...f, bulan_hijriyah: e.target.value}))} required>
+              <option value="" disabled>-- Pilih Bulan --</option>
               {BULAN_HIJRIYAH.map(b => <option key={b} value={b}>{getBulanLabel(b)}</option>)}
             </select>
           </div>

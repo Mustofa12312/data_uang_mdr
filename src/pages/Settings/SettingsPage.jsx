@@ -165,12 +165,17 @@ export default function SettingsPage() {
         const headerRowIdx = raw.findIndex(r => r[0] === 'No' && r[1] === 'Instansi')
         const dataRows = raw.slice(headerRowIdx + 1).filter(r => r[0] !== '' && r[9] !== '')
 
-        let success = 0, failed = 0, skipped = 0
-        const errors = []
-
-        // Ambil data transaksi yang sudah ada untuk mengecek duplikasi
+        // Ambil data existing sekali saja untuk cek duplikasi
         const existingTx = await transaksiService.getAll({ limit: 100000 })
+        const existingSet = new Set(
+          existingTx.map(t => `${t.instansi_id}|${t.uraian}|${t.nominal}|${t.jenis}|${t.tanggal}`)
+        )
 
+        let skipped = 0
+        const errors = []
+        const batchPayloads = []
+
+        // Kumpulkan semua payload yang valid dulu, baru insert sekali (batch)
         for (const row of dataRows) {
           const [, namaInstansi, tanggal, tanggalH, bulanH, tahunH, kode, bukti, jenis, uraian, sumberDana, nominal] = row
 
@@ -179,7 +184,6 @@ export default function SettingsPage() {
           )
 
           if (!instansi) {
-            failed++
             errors.push(`"${uraian}": Instansi "${namaInstansi}" tidak ditemukan di sistem.`)
             continue
           }
@@ -203,28 +207,29 @@ export default function SettingsPage() {
             nominal:          nominalBersih,
           }
 
-          // Cek duplikasi
-          const isDuplicate = existingTx.some(t => 
-            t.instansi_id === payload.instansi_id &&
-            t.uraian === payload.uraian &&
-            t.nominal === payload.nominal &&
-            t.jenis === payload.jenis &&
-            t.tanggal === payload.tanggal
-          )
-
-          if (isDuplicate) {
+          // Cek duplikasi via Set (O(1)) — jauh lebih cepat dari .some()
+          const key = `${payload.instansi_id}|${payload.uraian}|${payload.nominal}|${payload.jenis}|${payload.tanggal}`
+          if (existingSet.has(key)) {
             skipped++
             errors.push(`"${payload.uraian}": sudah ada, dilewati.`)
             continue
           }
 
-          try {
-            const { error } = await supabase.from('transaksi').insert(payload)
-            if (error) { failed++; errors.push(`"${uraianBersih}": ${error.message}`) }
-            else success++
-          } catch {
-            failed++
-            errors.push(`"${uraianBersih}": Error tidak terduga.`)
+          batchPayloads.push(payload)
+        }
+
+        // Batch insert: 1 request untuk semua data (chunked per 500 baris)
+        let success = 0
+        let failed = 0
+        const CHUNK_SIZE = 500
+        for (let i = 0; i < batchPayloads.length; i += CHUNK_SIZE) {
+          const chunk = batchPayloads.slice(i, i + CHUNK_SIZE)
+          const { error } = await supabase.from('transaksi').insert(chunk)
+          if (error) {
+            failed += chunk.length
+            errors.push(`Batch insert gagal: ${error.message}`)
+          } else {
+            success += chunk.length
           }
         }
 

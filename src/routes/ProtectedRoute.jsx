@@ -5,7 +5,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function ProtectedRoute({ children, adminOnly = false }) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, profileError, loading } = useAuth()
 
   // Tampilkan loading spinner hanya saat proses cek sesi awal
   if (loading) {
@@ -23,17 +23,17 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
   if (!user) return <Navigate to="/login" replace />
 
   // Route khusus admin: cek role dari profile
-  // Jika profile belum dimuat tapi user ada, tunggu sebentar (profile bisa null sejenak)
   if (adminOnly) {
-    if (profile === null) {
-      // Profile masih dimuat, tampilkan loading singkat
+    // Jika profile masih dimuat (null) DAN belum ada error → tunggu sebentar
+    if (profile === null && !profileError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50">
           <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         </div>
       )
     }
-    if (profile?.role !== 'super_admin') {
+    // Jika gagal fetch profile atau bukan super_admin → redirect ke dashboard
+    if (profileError || profile?.role !== 'super_admin') {
       return <Navigate to="/dashboard" replace />
     }
   }

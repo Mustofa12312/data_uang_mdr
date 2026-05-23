@@ -38,12 +38,12 @@ export const instansiService = {
 
 // ---- TRANSAKSI ----
 export const transaksiService = {
-  async getAll({ instansiId, bulanHijriyah, tahunHijriyah, search, tglMulai, tglAkhir, limit = 100000 }) {
+  async getAll({ instansiId, bulanHijriyah, tahunHijriyah, search, tglMulai, tglAkhir, limit = 100000, orderDesc = false }) {
     let q = supabase
       .from('transaksi')
       .select('*, instansi:instansi_id(nama_instansi, kode_instansi)')
-      .order('tanggal', { ascending: true })
-      .order('created_at', { ascending: true })
+      .order('tanggal', { ascending: !orderDesc })
+      .order('created_at', { ascending: !orderDesc })
       .limit(limit)
 
     if (instansiId) q = q.eq('instansi_id', instansiId)
@@ -119,8 +119,7 @@ export const pengaturanService = {
   async updateSettings(payload) {
     const { data, error } = await supabase
       .from('pengaturan')
-      .update(payload)
-      .eq('id', 1)
+      .upsert({ id: 1, ...payload }, { onConflict: 'id' })
       .select()
       .single()
     if (error) throw error

@@ -23,7 +23,19 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/dashboard')
     } catch (err) {
-      setError('Email atau password salah. Silakan coba lagi.')
+      // Bedakan error berdasarkan pesan dari Supabase
+      const msg = err?.message || ''
+      if (msg.toLowerCase().includes('invalid login credentials') || msg.toLowerCase().includes('invalid password')) {
+        setError('Email atau password salah. Silakan periksa kembali.')
+      } else if (msg.toLowerCase().includes('email not confirmed')) {
+        setError('Email belum dikonfirmasi. Periksa kotak masuk email Anda.')
+      } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+        setError('Tidak dapat terhubung ke server. Periksa koneksi internet Anda.')
+      } else if (msg.toLowerCase().includes('too many requests') || msg.toLowerCase().includes('rate limit')) {
+        setError('Terlalu banyak percobaan login. Tunggu beberapa menit sebelum mencoba lagi.')
+      } else {
+        setError(`Gagal masuk: ${msg || 'Terjadi kesalahan tidak dikenal.'}`)
+      }
     } finally {
       setLoading(false)
     }
@@ -49,7 +61,7 @@ export default function LoginPage() {
             </div>
           </div>
           <h2 className="text-white font-display font-bold text-4xl leading-tight mb-4">
-            Sistem Informasi<br />Keuangan &amp;<br />Pelaporan
+            Sistem Informasi<br />Keuangan &<br />Pelaporan
           </h2>
           <p className="text-emerald-100 text-sm leading-relaxed max-w-xs">
             Pengelolaan keuangan Pondok Pesantren Darur Rohman yang modern, terpusat, dan mudah digunakan.

@@ -9,11 +9,13 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [profileError, setProfileError] = useState(false) // baru: flag jika fetch profile gagal
   const [loading, setLoading] = useState(true)
   // Gunakan ref untuk mencegah double-call dari React StrictMode
   const initialized = useRef(false)
 
   async function fetchProfile(userId) {
+    setProfileError(false)
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -22,9 +24,8 @@ export function AuthProvider({ children }) {
         .single()
 
       if (error) {
-        // Jika profile tidak ketemu (404), biarkan user tetap login
-        // Jangan auto-logout karena bisa jadi masalah jaringan sementara
         console.warn('Profile fetch warning:', error.message)
+        setProfileError(true) // tandai gagal agar tidak spinner selamanya
         return
       }
 
@@ -36,9 +37,10 @@ export function AuthProvider({ children }) {
       }
 
       setProfile(data)
+      setProfileError(false)
     } catch (err) {
-      // Jangan auto-logout pada network error — user masih valid
       console.warn('Profile fetch error (non-critical):', err.message)
+      setProfileError(true) // tandai gagal agar tidak spinner selamanya
     }
   }
 
@@ -49,8 +51,8 @@ export function AuthProvider({ children }) {
 
     let mounted = true
 
-    // Ambil sesi yang ada terlebih dahulu (sinkron dari localStorage)
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+    // Ambil sesi — LANGSUNG release loading, profile dimuat di background
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (!mounted) return
 
       if (error) {
@@ -61,17 +63,20 @@ export function AuthProvider({ children }) {
 
       if (session?.user) {
         setUser(session.user)
-        await fetchProfile(session.user.id)
+        // KRITIS: release loading dulu agar UI langsung tampil
+        // fetchProfile jalan di background (tidak di-await)
+        fetchProfile(session.user.id)
       } else {
         setUser(null)
         setProfile(null)
       }
 
+      // Loading selesai begitu kita tahu status auth — tidak perlu tunggu profile
       if (mounted) setLoading(false)
     })
 
     // Pantau perubahan auth (login/logout) SETELAH inisiasi awal
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
 
       // Abaikan event INITIAL_SESSION karena sudah ditangani getSession() di atas
@@ -79,10 +84,11 @@ export function AuthProvider({ children }) {
 
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user)
-        await fetchProfile(session.user.id)
+        fetchProfile(session.user.id) // non-blocking
       } else if (event === 'SIGNED_OUT') {
         setUser(null)
         setProfile(null)
+        setProfileError(false)
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         setUser(session.user)
       }
@@ -97,8 +103,8 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-    // Ambil profil setelah login berhasil
-    if (data.user) await fetchProfile(data.user.id)
+    // fetchProfile akan dipanggil otomatis oleh onAuthStateChange (SIGNED_IN)
+    // Jangan await di sini agar tidak memblokir navigasi
     return data
   }
 
@@ -111,7 +117,7 @@ export function AuthProvider({ children }) {
   const instansiId = profile?.instansi?.id || profile?.instansi_id
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, logout, isSuperAdmin, isViewer, instansiId }}>
+    <AuthContext.Provider value={{ user, profile, profileError, loading, login, logout, isSuperAdmin, isViewer, instansiId }}>
       {children}
     </AuthContext.Provider>
   )

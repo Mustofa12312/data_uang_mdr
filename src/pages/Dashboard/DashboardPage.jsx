@@ -37,37 +37,69 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function DashboardPage() {
-  const { isSuperAdmin, instansiId } = useAuth()
+  const { isSuperAdmin, instansiId, profile } = useAuth()
   const [instansiList, setInstansiList] = useState([])
-  const [selectedInstansi, setSelectedInstansi] = useState(instansiId || '')
-  const [tahun, setTahun] = useState('1446')
+  const [selectedInstansi, setSelectedInstansi] = useState('')
+  const [tahun, setTahun] = useState('')
   const [loading, setLoading] = useState(true)
   const [chartType, setChartType] = useState('area')
   const [summaryData, setSummaryData] = useState([])
   const [recentData, setRecentData] = useState([])
+  const [initialized, setInitialized] = useState(false)
 
+  // Update selectedInstansi saat profile selesai dimuat
   useEffect(() => {
-    if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
-    pengaturanService.getSettings().then(s => {
-      if (s?.tahun_aktif) setTahun(s.tahun_aktif)
-    }).catch(console.error)
-  }, [isSuperAdmin])
+    if (instansiId && !selectedInstansi) setSelectedInstansi(instansiId)
+  }, [instansiId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch settings + instansi — langsung saat mount, TIDAK tunggu profile
+  // Profile berjalan di background (AuthContext), tidak perlu diblok di sini
   useEffect(() => {
+    let mounted = true
     setLoading(true)
-    const id = isSuperAdmin ? (selectedInstansi || null) : instansiId
 
     Promise.all([
-      transaksiService.getSummary(id, tahun || null),
-      transaksiService.getAll({ instansiId: id, tahunHijriyah: tahun || null, limit: 10 }) // Hanya ambil 10 terbaru
+      pengaturanService.getSettings().catch(() => ({})),
+      // getAll instansi hanya relevan untuk super_admin,
+      // tapi kita tidak bisa cek isSuperAdmin sebelum profile dimuat.
+      // Solusi: fetch saja, nanti di-render hanya jika isSuperAdmin true.
+      instansiService.getAll().catch(() => []),
+    ]).then(([settings, instansiData]) => {
+      if (!mounted) return
+      const activeTahun = settings?.tahun_aktif || '1446'
+      setInstansiList(instansiData)
+      setTahun(prev => prev || activeTahun)
+      setInitialized(activeTahun)
+    })
+
+    return () => { mounted = false }
+  }, []) // fetch sekali saat mount — tidak perlu deps lain
+
+  // Fetch data transaksi HANYA setelah tahun aktif diketahui
+  useEffect(() => {
+    if (!initialized) return
+
+    let mounted = true
+    setLoading(true)
+    // Untuk non-super_admin gunakan instansiId dari profile
+    // Untuk super_admin gunakan filter pilihan (bisa null = semua)
+    const id = isSuperAdmin ? (selectedInstansi || null) : instansiId
+    const activeTahun = tahun || initialized
+
+    Promise.all([
+      transaksiService.getSummary(id, activeTahun),
+      transaksiService.getAll({ instansiId: id, tahunHijriyah: activeTahun, limit: 10, orderDesc: true }),
     ])
       .then(([summary, recent]) => {
+        if (!mounted) return
         setSummaryData(summary || [])
         setRecentData(recent || [])
       })
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [selectedInstansi, instansiId, isSuperAdmin, tahun])
+      .finally(() => { if (mounted) setLoading(false) })
+
+    return () => { mounted = false }
+  }, [selectedInstansi, instansiId, isSuperAdmin, tahun, initialized])
 
   const stats = useMemo(() => {
     const pem = summaryData.filter(t => t.jenis === 'pemasukan').reduce((s, t) => s + (t.nominal || 0), 0)
