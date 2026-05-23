@@ -38,12 +38,13 @@ function CustomTooltip({ active, payload, label }) {
 
 export default function DashboardPage() {
   const { isSuperAdmin, instansiId } = useAuth()
-  const [transaksi, setTransaksi]         = useState([])
-  const [instansiList, setInstansiList]   = useState([])
+  const [instansiList, setInstansiList] = useState([])
   const [selectedInstansi, setSelectedInstansi] = useState(instansiId || '')
-  const [tahun, setTahun]                 = useState('1446')
-  const [loading, setLoading]             = useState(true)
-  const [chartType, setChartType]         = useState('area')
+  const [tahun, setTahun] = useState('1446')
+  const [loading, setLoading] = useState(true)
+  const [chartType, setChartType] = useState('area')
+  const [summaryData, setSummaryData] = useState([])
+  const [recentData, setRecentData] = useState([])
 
   useEffect(() => {
     if (isSuperAdmin) instansiService.getAll().then(setInstansiList).catch(console.error)
@@ -55,30 +56,37 @@ export default function DashboardPage() {
   useEffect(() => {
     setLoading(true)
     const id = isSuperAdmin ? (selectedInstansi || null) : instansiId
-    transaksiService.getAll({ instansiId: id, tahunHijriyah: tahun || null })
-      .then(setTransaksi)
+
+    Promise.all([
+      transaksiService.getSummary(id, tahun || null),
+      transaksiService.getAll({ instansiId: id, tahunHijriyah: tahun || null, limit: 10 }) // Hanya ambil 10 terbaru
+    ])
+      .then(([summary, recent]) => {
+        setSummaryData(summary || [])
+        setRecentData(recent || [])
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [selectedInstansi, instansiId, isSuperAdmin, tahun])
 
   const stats = useMemo(() => {
-    const pem = transaksi.filter(t => t.jenis === 'pemasukan').reduce((s, t) => s + (t.nominal || 0), 0)
-    const pen = transaksi.filter(t => t.jenis === 'pengeluaran').reduce((s, t) => s + (t.nominal || 0), 0)
+    const pem = summaryData.filter(t => t.jenis === 'pemasukan').reduce((s, t) => s + (t.nominal || 0), 0)
+    const pen = summaryData.filter(t => t.jenis === 'pengeluaran').reduce((s, t) => s + (t.nominal || 0), 0)
     return { pemasukan: pem, pengeluaran: pen, saldo: pem - pen }
-  }, [transaksi])
+  }, [summaryData])
 
   const chartData = useMemo(() => {
     return BULAN_HIJRIYAH.map(bulan => {
-      const data = transaksi.filter(t => t.bulan_hijriyah === bulan)
+      const data = summaryData.filter(t => t.bulan_hijriyah === bulan)
       const pem = data.filter(t => t.jenis === 'pemasukan').reduce((s, t) => s + (t.nominal || 0), 0)
       const pen = data.filter(t => t.jenis === 'pengeluaran').reduce((s, t) => s + (t.nominal || 0), 0)
       return { name: getBulanLabel(bulan).substring(0, 8), pem, pen, saldo: pem - pen, count: data.length }
     }).filter(d => d.pem > 0 || d.pen > 0)
-  }, [transaksi])
+  }, [summaryData])
 
   const recent = useMemo(() =>
-    [...transaksi].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8),
-    [transaksi]
+    [...recentData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8),
+    [recentData]
   )
 
   return (
@@ -87,7 +95,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-800 font-display">Ringkasan Keuangan</h2>
-          <p className="text-sm text-slate-500">Tahun Hijriyah {tahun}H · {transaksi.length} transaksi</p>
+          <p className="text-sm text-slate-500">Tahun Hijriyah {tahun}H · {summaryData.length} transaksi</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input
@@ -115,7 +123,7 @@ export default function DashboardPage() {
       {/* Stat cards */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[1,2,3].map(n => (
+          {[1, 2, 3].map(n => (
             <div key={n} className="card p-5 h-24 animate-pulse bg-slate-100" />
           ))}
         </div>
@@ -127,7 +135,7 @@ export default function DashboardPage() {
             iconColor="text-emerald-600"
             label="Total Pemasukan"
             value={formatRupiah(stats.pemasukan)}
-            sub={`${transaksi.filter(t=>t.jenis==='pemasukan').length} transaksi`}
+            sub={`${summaryData.filter(t => t.jenis === 'pemasukan').length} transaksi`}
           />
           <StatCard
             icon={ArrowTrendingDownIcon}
@@ -135,7 +143,7 @@ export default function DashboardPage() {
             iconColor="text-red-500"
             label="Total Pengeluaran"
             value={formatRupiah(stats.pengeluaran)}
-            sub={`${transaksi.filter(t=>t.jenis==='pengeluaran').length} transaksi`}
+            sub={`${summaryData.filter(t => t.jenis === 'pengeluaran').length} transaksi`}
           />
           <StatCard
             icon={ScaleIcon}
@@ -177,18 +185,18 @@ export default function DashboardPage() {
               <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradPem" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.02}/>
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="gradPen" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f87171" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#f87171" stopOpacity={0.02}/>
+                    <stop offset="5%" stopColor="#f87171" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f87171" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
-                  tickFormatter={v => v >= 1e6 ? `${(v/1e6).toFixed(0)}jt` : v >= 1e3 ? `${(v/1e3).toFixed(0)}rb` : v} />
+                  tickFormatter={v => v >= 1e6 ? `${(v / 1e6).toFixed(0)}jt` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}rb` : v} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: '12px' }} />
                 <Area type="monotone" dataKey="pem" name="Pemasukan" stroke="#10b981" strokeWidth={2.5} fill="url(#gradPem)" dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
@@ -199,11 +207,11 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
-                  tickFormatter={v => v >= 1e6 ? `${(v/1e6).toFixed(0)}jt` : v >= 1e3 ? `${(v/1e3).toFixed(0)}rb` : v} />
+                  tickFormatter={v => v >= 1e6 ? `${(v / 1e6).toFixed(0)}jt` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}rb` : v} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: '12px' }} />
-                <Bar dataKey="pem" name="Pemasukan" fill="#10b981" radius={[5,5,0,0]} />
-                <Bar dataKey="pen" name="Pengeluaran" fill="#f87171" radius={[5,5,0,0]} />
+                <Bar dataKey="pem" name="Pemasukan" fill="#10b981" radius={[5, 5, 0, 0]} />
+                <Bar dataKey="pen" name="Pengeluaran" fill="#f87171" radius={[5, 5, 0, 0]} />
               </BarChart>
             )}
           </ResponsiveContainer>
@@ -235,20 +243,20 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {BULAN_HIJRIYAH.map(bulan => {
-                  const rows = transaksi.filter(t => t.bulan_hijriyah === bulan)
-                  const pem = rows.filter(t => t.jenis === 'pemasukan').reduce((s,t) => s + t.nominal, 0)
-                  const pen = rows.filter(t => t.jenis === 'pengeluaran').reduce((s,t) => s + t.nominal, 0)
+                  const rows = summaryData.filter(t => t.bulan_hijriyah === bulan)
+                  const pem = rows.filter(t => t.jenis === 'pemasukan').reduce((s, t) => s + t.nominal, 0)
+                  const pen = rows.filter(t => t.jenis === 'pengeluaran').reduce((s, t) => s + t.nominal, 0)
                   if (pem === 0 && pen === 0) return null
                   return (
                     <tr key={bulan}>
                       <td className="font-medium">{getBulanLabel(bulan)}</td>
                       <td className="text-right text-emerald-600 text-money">{formatRupiah(pem)}</td>
                       <td className="text-right text-red-500 text-money">{formatRupiah(pen)}</td>
-                      <td className={`text-right text-money font-semibold ${pem-pen>=0?'text-blue-600':'text-amber-600'}`}>{formatRupiah(pem-pen)}</td>
+                      <td className={`text-right text-money font-semibold ${pem - pen >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>{formatRupiah(pem - pen)}</td>
                     </tr>
                   )
                 })}
-                {transaksi.length === 0 && (
+                {summaryData.length === 0 && (
                   <tr><td colSpan={4} className="text-center py-8 text-slate-400 text-sm">Belum ada data transaksi</td></tr>
                 )}
               </tbody>
@@ -268,7 +276,7 @@ export default function DashboardPage() {
             )}
             {recent.map(t => (
               <div key={t.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/70 transition">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${t.jenis==='pemasukan' ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${t.jenis === 'pemasukan' ? 'bg-emerald-100' : 'bg-red-100'}`}>
                   {t.jenis === 'pemasukan'
                     ? <ArrowTrendingUpIcon className="w-4 h-4 text-emerald-600" />
                     : <ArrowTrendingDownIcon className="w-4 h-4 text-red-500" />
@@ -278,7 +286,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium text-slate-700 truncate">{t.uraian || '-'}</p>
                   <p className="text-xs text-slate-400">{t.tanggal || ''} · {getBulanLabel(t.bulan_hijriyah)}</p>
                 </div>
-                <span className={`text-sm font-semibold text-money flex-shrink-0 ${t.jenis==='pemasukan' ? 'text-emerald-600' : 'text-red-500'}`}>
+                <span className={`text-sm font-semibold text-money flex-shrink-0 ${t.jenis === 'pemasukan' ? 'text-emerald-600' : 'text-red-500'}`}>
                   {t.jenis === 'pemasukan' ? '+' : '-'}{formatRupiah(t.nominal)}
                 </span>
               </div>
